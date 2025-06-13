@@ -6,7 +6,9 @@ import utils.db_connection;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class GradeDaoImpl implements GradeDao {
     @Override
@@ -161,6 +163,131 @@ public class GradeDaoImpl implements GradeDao {
         }
         return history;
     }
+    
+    @Override
+    public List<Map<String, Object>> getGradesWithCourseInfo(String studentId) {
+        String sql = "SELECT g.*, t.academic_year, t.semester, c.id as course_id, c.name as course_name, c.credits " +
+                     "FROM grade g " +
+                     "JOIN teaching_task t ON g.teaching_task_id = t.id " +
+                     "JOIN course c ON t.course_id = c.id " +
+                     "WHERE g.student_id = ? AND g.status != '已删除'";
+        
+        List<Map<String, Object>> resultList = new ArrayList<>();
+        
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, studentId);
+            ResultSet rs = ps.executeQuery();
+            
+            while (rs.next()) {
+                Map<String, Object> gradeInfo = new HashMap<>();
+                
+                // 添加Grade对象
+                Grade grade = extractGrade(rs);
+                gradeInfo.put("grade", grade);
+                
+                // 添加课程信息
+                gradeInfo.put("courseId", rs.getString("course_id"));
+                gradeInfo.put("courseName", rs.getString("course_name"));
+                gradeInfo.put("credits", rs.getDouble("credits"));
+                gradeInfo.put("academicYear", rs.getString("academic_year"));
+                gradeInfo.put("semester", rs.getString("semester"));
+                
+                resultList.add(gradeInfo);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return resultList;
+    }
+    
+    @Override
+    public List<Map<String, Object>> getClassGradeSummary(String className, String academicYear, String semester) {
+        StringBuilder sql = new StringBuilder(
+            "SELECT s.id as student_id, s.name as student_name, s.class_name, s.major, " +
+            "g.*, t.academic_year, t.semester, c.id as course_id, c.name as course_name, c.credits " +
+            "FROM student s " +
+            "LEFT JOIN grade g ON s.id = g.student_id AND g.status != '已删除' " +
+            "LEFT JOIN teaching_task t ON g.teaching_task_id = t.id " +
+            "LEFT JOIN course c ON t.course_id = c.id " +
+            "WHERE s.class_name = ? AND s.status != '已删除'"
+        );
+        
+        List<Object> params = new ArrayList<>();
+        params.add(className);
+        
+        if (academicYear != null && !academicYear.isEmpty()) {
+            sql.append(" AND t.academic_year = ?");
+            params.add(academicYear);
+        }
+        
+        if (semester != null && !semester.isEmpty()) {
+            sql.append(" AND t.semester = ?");
+            params.add(semester);
+        }
+        
+        sql.append(" ORDER BY s.id, c.name");
+        
+        List<Map<String, Object>> resultList = new ArrayList<>();
+        
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            
+            ResultSet rs = ps.executeQuery();
+            
+            while (rs.next()) {
+                Map<String, Object> record = new HashMap<>();
+                
+                // 学生信息
+                record.put("studentId", rs.getString("student_id"));
+                record.put("studentName", rs.getString("student_name"));
+                record.put("className", rs.getString("class_name"));
+                record.put("major", rs.getString("major"));
+                
+                // 课程信息
+                record.put("courseId", rs.getString("course_id"));
+                record.put("courseName", rs.getString("course_name"));
+                record.put("credits", rs.getObject("credits", Double.class));
+                record.put("academicYear", rs.getString("academic_year"));
+                record.put("semester", rs.getString("semester"));
+                
+                // 成绩信息
+                Integer gradeId = rs.getObject("id", Integer.class);
+                if (gradeId != null) {
+                    Grade grade = new Grade();
+                    grade.setId(gradeId);
+                    grade.setStudentId(rs.getString("student_id"));
+                    grade.setTeachingTaskId(rs.getString("teaching_task_id"));
+                    grade.setRegularScore(rs.getObject("regular_score", Double.class));
+                    grade.setMidtermScore(rs.getObject("midterm_score", Double.class));
+                    grade.setFinalScore(rs.getObject("final_score", Double.class));
+                    grade.setTotalScore(rs.getObject("total_score", Double.class));
+                    grade.setEntryTime(rs.getTimestamp("entry_time"));
+                    grade.setEntryBy(rs.getString("entry_by"));
+                    grade.setLastModifiedTime(rs.getTimestamp("last_modified_time"));
+                    grade.setLastModifiedBy(rs.getString("last_modified_by"));
+                    grade.setModificationReason(rs.getString("modification_reason"));
+                    grade.setStatus(rs.getString("status"));
+                    record.put("grade", grade);
+                    record.put("totalScore", rs.getObject("total_score", Double.class));
+                } else {
+                    record.put("grade", null);
+                    record.put("totalScore", null);
+                }
+                
+                resultList.add(record);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return resultList;
+    }
 
     private Grade extractGrade(ResultSet rs) throws SQLException {
         Grade g = new Grade();
@@ -230,5 +357,131 @@ public class GradeDaoImpl implements GradeDao {
 //            int delResult = dao.deleteGrade(grades.get(0).getId());
 //            System.out.println("逻辑删除结果: " + delResult);
 //        }
+    }
+    
+    @Override
+    public List<Map<String, Object>> getCourseGradeSummary(String courseId, String academicYear, String semester) {
+        StringBuilder sql = new StringBuilder(
+            "SELECT s.id as student_id, s.name as student_name, s.class_name, s.major, " +
+            "g.*, t.academic_year, t.semester, c.id as course_id, c.name as course_name, c.credits " +
+            "FROM grade g " +
+            "JOIN teaching_task t ON g.teaching_task_id = t.id " +
+            "JOIN course c ON t.course_id = c.id " +
+            "JOIN student s ON g.student_id = s.id " +
+            "WHERE c.id = ? AND g.status != '已删除' AND s.status != '已删除'"
+        );
+        
+        List<Object> params = new ArrayList<>();
+        params.add(courseId);
+        
+        if (academicYear != null && !academicYear.isEmpty()) {
+            sql.append(" AND t.academic_year = ?");
+            params.add(academicYear);
+        }
+        
+        if (semester != null && !semester.isEmpty()) {
+            sql.append(" AND t.semester = ?");
+            params.add(semester);
+        }
+        
+        sql.append(" ORDER BY s.id, t.academic_year, t.semester");
+        
+        List<Map<String, Object>> result = new ArrayList<>();
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> record = new HashMap<>();
+                    record.put("studentId", rs.getString("student_id"));
+                    record.put("studentName", rs.getString("student_name"));
+                    record.put("className", rs.getString("class_name"));
+                    record.put("major", rs.getString("major"));
+                    record.put("courseId", rs.getString("course_id"));
+                    record.put("courseName", rs.getString("course_name"));
+                    record.put("credits", rs.getDouble("credits"));
+                    record.put("academicYear", rs.getString("academic_year"));
+                    record.put("semester", rs.getString("semester"));
+                    record.put("regularScore", rs.getObject("regular_score"));
+                    record.put("midtermScore", rs.getObject("midterm_score"));
+                    record.put("finalScore", rs.getObject("final_score"));
+                    record.put("totalScore", rs.getObject("total_score"));
+                    result.add(record);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return result;
+    }
+    
+    @Override
+    public Map<String, Object> getCourseGradeStatistics(String courseId, String academicYear, String semester) {
+        StringBuilder sql = new StringBuilder(
+            "SELECT " +
+            "COUNT(*) as total_count, " +
+            "AVG(g.total_score) as average_score, " +
+            "MAX(g.total_score) as highest_score, " +
+            "MIN(g.total_score) as lowest_score, " +
+            "SUM(CASE WHEN g.total_score >= 60 THEN 1 ELSE 0 END) as pass_count, " +
+            "SUM(CASE WHEN g.total_score >= 85 THEN 1 ELSE 0 END) as excellent_count, " +
+            "c.name as course_name " +
+            "FROM grade g " +
+            "JOIN teaching_task t ON g.teaching_task_id = t.id " +
+            "JOIN course c ON t.course_id = c.id " +
+            "WHERE c.id = ? AND g.status != '已删除' AND g.total_score IS NOT NULL"
+        );
+        
+        List<Object> params = new ArrayList<>();
+        params.add(courseId);
+        
+        if (academicYear != null && !academicYear.isEmpty()) {
+            sql.append(" AND t.academic_year = ?");
+            params.add(academicYear);
+        }
+        
+        if (semester != null && !semester.isEmpty()) {
+            sql.append(" AND t.semester = ?");
+            params.add(semester);
+        }
+        
+        sql.append(" GROUP BY c.id, c.name");
+        
+        Map<String, Object> statistics = new HashMap<>();
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    int totalCount = rs.getInt("total_count");
+                    int passCount = rs.getInt("pass_count");
+                    int excellentCount = rs.getInt("excellent_count");
+                    
+                    statistics.put("courseId", courseId);
+                    statistics.put("courseName", rs.getString("course_name"));
+                    statistics.put("academicYear", academicYear);
+                    statistics.put("semester", semester);
+                    statistics.put("totalCount", totalCount);
+                    statistics.put("averageScore", Math.round(rs.getDouble("average_score") * 100.0) / 100.0);
+                    statistics.put("highestScore", rs.getDouble("highest_score"));
+                    statistics.put("lowestScore", rs.getDouble("lowest_score"));
+                    statistics.put("passCount", passCount);
+                    statistics.put("excellentCount", excellentCount);
+                    statistics.put("passRate", totalCount > 0 ? Math.round((double) passCount / totalCount * 10000.0) / 100.0 : 0.0);
+                    statistics.put("excellentRate", totalCount > 0 ? Math.round((double) excellentCount / totalCount * 10000.0) / 100.0 : 0.0);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return statistics;
     }
 }

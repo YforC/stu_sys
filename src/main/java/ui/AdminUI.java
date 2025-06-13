@@ -3,6 +3,7 @@ package ui;
 import entity.Student;
 import entity.Teacher;
 import entity.Course;
+import java.awt.Font;
 import service.StudentService;
 import service.StudentServiceImpl;
 import service.TeacherService;
@@ -13,6 +14,7 @@ import service.GradeService;
 import service.GradeServiceImpl;
 import entity.Grade;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import javax.swing.*;
@@ -20,18 +22,21 @@ import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 import java.awt.Color;
-import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class AdminUI {
     private JFrame frame;
     private StudentService studentService = new StudentServiceImpl();
+    private GradeService gradeService = new GradeServiceImpl();
     private JTable studentTable;
     private DefaultTableModel studentTableModel;
     private JTextField searchField;
@@ -1041,6 +1046,10 @@ public class AdminUI {
 
             if (name.equals("学生成绩单导出")) {
                 btn.addActionListener(e -> showStudentTranscriptExportDialog(dialog));
+            } else if (name.equals("班级成绩汇总报表")) {
+                btn.addActionListener(e -> showClassGradeSummaryDialog(dialog));
+            } else if (name.equals("课程成绩分布报表")) {
+                btn.addActionListener(e -> showCourseGradeSummaryDialog(dialog));
             }
             // 其他按钮的事件处理后续实现
         }
@@ -1130,22 +1139,26 @@ public class AdminUI {
             row.createCell(1).setCellValue("课程名称");
             row.createCell(2).setCellValue("学分");
             row.createCell(3).setCellValue("成绩");
-            row.createCell(4).setCellValue("学年");
-            row.createCell(5).setCellValue("学期");
 
+            // 获取包含课程信息的成绩数据
+            List<Map<String, Object>> gradesWithInfo = gradeService.getGradesWithCourseInfo(student.getId());
+            
             // 填充成绩数据
-            for (Grade g : grades) {
+            for (Map<String, Object> gradeInfo : gradesWithInfo) {
+                Grade g = (Grade) gradeInfo.get("grade");
+                String courseId = (String) gradeInfo.get("courseId");
+                String courseName = (String) gradeInfo.get("courseName");
+                Double credits = (Double) gradeInfo.get("credits");
+                
                 Row r = sheet.createRow(rowIdx++);
-                r.createCell(0).setCellValue(g.getCourseId() != null ? g.getCourseId() : "");
-                r.createCell(1).setCellValue(g.getCourseName() != null ? g.getCourseName() : "");
-                r.createCell(2).setCellValue(g.getCredits() != null ? g.getCredits() : 0);
-                r.createCell(3).setCellValue(g.getScore() != null ? g.getScore() : 0);
-                r.createCell(4).setCellValue(g.getAcademicYear() != null ? g.getAcademicYear() : "");
-                r.createCell(5).setCellValue(g.getSemester() != null ? g.getSemester() : "");
+                r.createCell(0).setCellValue(courseId != null ? courseId : "");
+                r.createCell(1).setCellValue(courseName != null ? courseName : "");
+                r.createCell(2).setCellValue(credits != null ? credits : 0);
+                r.createCell(3).setCellValue(g.getTotalScore() != null ? g.getTotalScore() : 0);
             }
 
             // 自动调整列宽
-            for (int i = 0; i < 6; i++) {
+            for (int i = 0; i < 4; i++) {
                 sheet.autoSizeColumn(i);
             }
 
@@ -1161,12 +1174,412 @@ public class AdminUI {
     }
 
     // 学生档案管理功能已完善，包括：
+    private void showClassGradeSummaryDialog(JDialog parent) {
+        JDialog dialog = new JDialog(parent, "班级成绩汇总报表", true);
+        dialog.setSize(500, 300);
+        dialog.setLocationRelativeTo(parent);
+        dialog.setLayout(new BorderLayout());
+        
+        // 创建输入面板
+        JPanel inputPanel = new JPanel(new GridBagLayout());
+        inputPanel.setBorder(BorderFactory.createTitledBorder("查询条件"));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        
+        // 班级名称输入
+        gbc.gridx = 0; gbc.gridy = 0;
+        inputPanel.add(new JLabel("班级名称:"), gbc);
+        JTextField classNameField = new JTextField(15);
+        gbc.gridx = 1;
+        inputPanel.add(classNameField, gbc);
+        
+        // 学年输入
+        gbc.gridx = 0; gbc.gridy = 1;
+        inputPanel.add(new JLabel("学年(可选):"), gbc);
+        JTextField academicYearField = new JTextField(15);
+        academicYearField.setToolTipText("例如: 2023-2024，留空查询所有学年");
+        gbc.gridx = 1;
+        inputPanel.add(academicYearField, gbc);
+        
+        // 学期输入
+        gbc.gridx = 0; gbc.gridy = 2;
+        inputPanel.add(new JLabel("学期(可选):"), gbc);
+        JComboBox<String> semesterCombo = new JComboBox<>(new String[]{"", "春", "秋"});
+        gbc.gridx = 1;
+        inputPanel.add(semesterCombo, gbc);
+        
+        dialog.add(inputPanel, BorderLayout.CENTER);
+        
+        // 按钮面板
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton exportBtn = new JButton("导出报表");
+        exportBtn.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        exportBtn.setBackground(new Color(0, 123, 255));
+        exportBtn.setForeground(Color.WHITE);
+        exportBtn.setFocusPainted(false);
+        
+        exportBtn.addActionListener(e -> {
+            String className = classNameField.getText().trim();
+            if (className.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "请输入班级名称！", "提示", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            String academicYear = academicYearField.getText().trim();
+            if (academicYear.isEmpty()) academicYear = null;
+            
+            String semester = (String) semesterCombo.getSelectedItem();
+            if (semester.isEmpty()) semester = null;
+            
+            exportClassGradeSummary(className, academicYear, semester);
+            dialog.dispose();
+        });
+        
+        JButton cancelBtn = new JButton("取消");
+        cancelBtn.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        cancelBtn.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(exportBtn);
+        buttonPanel.add(cancelBtn);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        
+        dialog.setVisible(true);
+    }
+    
+    private void exportClassGradeSummary(String className, String academicYear, String semester) {
+        try {
+            List<Map<String, Object>> summaryData = gradeService.getClassGradeSummary(className, academicYear, semester);
+            
+            if (summaryData.isEmpty()) {
+                JOptionPane.showMessageDialog(frame, "未找到该班级的成绩记录！", "提示", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            
+            // 创建Excel工作簿
+            Workbook workbook = new XSSFWorkbook();
+            Sheet sheet = workbook.createSheet(className + "成绩汇总");
+            
+            // 创建标题行样式
+            CellStyle titleStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font titleFont = workbook.createFont();
+            titleFont.setBold(true);
+            titleFont.setFontHeightInPoints((short) 14);
+            titleStyle.setFont(titleFont);
+            titleStyle.setAlignment(HorizontalAlignment.CENTER);
+            titleStyle.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
+            titleStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            
+            // 创建表头样式
+            CellStyle headerStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+            headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            
+            // 创建标题
+            Row titleRow = sheet.createRow(0);
+            Cell titleCell = titleRow.createCell(0);
+            String title = className + "成绩汇总报表";
+            if (academicYear != null) title += "（" + academicYear;
+            if (semester != null) title += " " + semester;
+            if (academicYear != null) title += "）";
+            titleCell.setCellValue(title);
+            titleCell.setCellStyle(titleStyle);
+            
+            // 合并标题单元格
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 6));
+            
+            // 创建表头
+            Row headerRow = sheet.createRow(2);
+            String[] headers = {"学号", "姓名", "专业", "课程编号", "课程名称", "学分", "总评成绩"};
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+            
+            // 填充数据
+            int rowIndex = 3;
+            for (Map<String, Object> record : summaryData) {
+                Row row = sheet.createRow(rowIndex++);
+                
+                row.createCell(0).setCellValue((String) record.get("studentId"));
+                row.createCell(1).setCellValue((String) record.get("studentName"));
+                row.createCell(2).setCellValue((String) record.get("major"));
+                row.createCell(3).setCellValue((String) record.get("courseId"));
+                row.createCell(4).setCellValue((String) record.get("courseName"));
+                
+                Double credits = (Double) record.get("credits");
+                if (credits != null) {
+                    row.createCell(5).setCellValue(credits);
+                } else {
+                    row.createCell(5).setCellValue("");
+                }
+                
+                Double totalScore = (Double) record.get("totalScore");
+                if (totalScore != null) {
+                    row.createCell(6).setCellValue(totalScore);
+                } else {
+                    row.createCell(6).setCellValue("未录入");
+                }
+            }
+            
+            // 自动调整列宽
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+            
+            // 保存文件
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("保存班级成绩汇总报表");
+            fileChooser.setSelectedFile(new File(className + "成绩汇总.xlsx"));
+            fileChooser.setFileFilter(new FileNameExtensionFilter("Excel文件 (*.xlsx)", "xlsx"));
+            
+            if (fileChooser.showSaveDialog(frame) == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+                if (!file.getName().toLowerCase().endsWith(".xlsx")) {
+                    file = new File(file.getAbsolutePath() + ".xlsx");
+                }
+                
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    workbook.write(fos);
+                    JOptionPane.showMessageDialog(frame, "班级成绩汇总报表导出成功！\n文件保存至: " + file.getAbsolutePath(), 
+                                                "导出成功", JOptionPane.INFORMATION_MESSAGE);
+                }
+            }
+            
+            workbook.close();
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(frame, "导出失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
     // 1. 学生信息的增删改查（已实现）
     // 2. 支持按学号、姓名、班级、专业、学院搜索（已实现）
     // 3. 添加、修改、删除均有弹窗提示，数据实时刷新（已实现）
     // 4. 表格支持操作按钮（已实现）
     // 5. 可扩展导入导出、批量操作等功能（如需请告知）
     // 如需进一步完善（如导入/导出、批量删除、分页、Excel导出等），请说明具体需求。
+    
+    private void showCourseGradeSummaryDialog(JDialog parent) {
+        JDialog dialog = new JDialog(parent, "课程成绩分布报表", true);
+        dialog.setSize(450, 300);
+        dialog.setLocationRelativeTo(parent);
+        dialog.setLayout(new BorderLayout());
+        
+        JPanel inputPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        
+        // 课程ID输入
+        gbc.gridx = 0; gbc.gridy = 0;
+        inputPanel.add(new JLabel("课程ID:"), gbc);
+        gbc.gridx = 1;
+        JTextField courseIdField = new JTextField(15);
+        inputPanel.add(courseIdField, gbc);
+        
+        // 学年输入
+        gbc.gridx = 0; gbc.gridy = 1;
+        inputPanel.add(new JLabel("学年:"), gbc);
+        gbc.gridx = 1;
+        JTextField academicYearField = new JTextField(15);
+        academicYearField.setText("2023-2024"); // 默认值
+        inputPanel.add(academicYearField, gbc);
+        
+        // 学期输入
+        gbc.gridx = 0; gbc.gridy = 2;
+        inputPanel.add(new JLabel("学期:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> semesterCombo = new JComboBox<>(new String[]{"春", "秋"});
+        inputPanel.add(semesterCombo, gbc);
+        
+        dialog.add(inputPanel, BorderLayout.CENTER);
+        
+        // 按钮面板
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton exportButton = new JButton("导出报表");
+        exportButton.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        exportButton.setBackground(new Color(173, 216, 230));
+        exportButton.setFocusPainted(false);
+        exportButton.setBorder(BorderFactory.createLineBorder(new Color(0, 102, 204), 1));
+        
+        JButton cancelButton = new JButton("取消");
+        cancelButton.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(exportButton);
+        buttonPanel.add(cancelButton);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        
+        exportButton.addActionListener(e -> {
+            String courseId = courseIdField.getText().trim();
+            String academicYear = academicYearField.getText().trim();
+            String semester = (String) semesterCombo.getSelectedItem();
+            
+            if (courseId.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "请输入课程ID！", "提示", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            exportCourseGradeSummary(courseId, academicYear, semester, dialog);
+        });
+        
+        dialog.setVisible(true);
+    }
+    
+    private void exportCourseGradeSummary(String courseId, String academicYear, String semester, JDialog parent) {
+        try {
+            // 获取课程成绩数据
+            List<Map<String, Object>> gradeData = gradeService.getCourseGradeSummary(courseId, academicYear, semester);
+            Map<String, Object> statistics = gradeService.getCourseGradeStatistics(courseId, academicYear, semester);
+            
+            if (gradeData.isEmpty()) {
+                JOptionPane.showMessageDialog(parent, "未找到符合条件的成绩数据！", "提示", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            // 创建Excel工作簿
+            Workbook workbook = new XSSFWorkbook();
+            Sheet sheet = workbook.createSheet("课程成绩分布报表");
+            
+            // 创建标题样式
+            CellStyle titleStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font titleFont = workbook.createFont();
+            titleFont.setBold(true);
+            titleFont.setFontHeightInPoints((short) 16);
+            titleStyle.setFont(titleFont);
+            titleStyle.setAlignment(HorizontalAlignment.CENTER);
+            
+            // 创建表头样式
+            CellStyle headerStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerFont.setFontHeightInPoints((short) 12);
+            headerStyle.setFont(headerFont);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+            headerStyle.setBorderTop(BorderStyle.THIN);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+            headerStyle.setBorderLeft(BorderStyle.THIN);
+            headerStyle.setBorderRight(BorderStyle.THIN);
+            
+            // 创建数据样式
+            CellStyle dataStyle = workbook.createCellStyle();
+            dataStyle.setBorderTop(BorderStyle.THIN);
+            dataStyle.setBorderBottom(BorderStyle.THIN);
+            dataStyle.setBorderLeft(BorderStyle.THIN);
+            dataStyle.setBorderRight(BorderStyle.THIN);
+            
+            int rowNum = 0;
+            
+            // 添加标题
+            Row titleRow = sheet.createRow(rowNum++);
+            Cell titleCell = titleRow.createCell(0);
+            String courseName = statistics.get("courseName") != null ? statistics.get("courseName").toString() : "课程";
+            titleCell.setCellValue(courseName + "成绩分布报表");
+            titleCell.setCellStyle(titleStyle);
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 7));
+            
+            // 添加统计信息
+            rowNum++; // 空行
+            Row infoRow1 = sheet.createRow(rowNum++);
+            infoRow1.createCell(0).setCellValue("课程ID: " + courseId);
+            infoRow1.createCell(2).setCellValue("学年: " + academicYear);
+            infoRow1.createCell(4).setCellValue("学期: " + semester);
+            
+            Row infoRow2 = sheet.createRow(rowNum++);
+            infoRow2.createCell(0).setCellValue("总人数: " + statistics.get("totalCount"));
+            infoRow2.createCell(2).setCellValue("平均分: " + statistics.get("averageScore"));
+            infoRow2.createCell(4).setCellValue("及格率: " + statistics.get("passRate") + "%");
+            
+            Row infoRow3 = sheet.createRow(rowNum++);
+            infoRow3.createCell(0).setCellValue("最高分: " + statistics.get("highestScore"));
+            infoRow3.createCell(2).setCellValue("最低分: " + statistics.get("lowestScore"));
+            infoRow3.createCell(4).setCellValue("优秀率: " + statistics.get("excellentRate") + "%");
+            
+            rowNum++; // 空行
+            
+            // 添加表头
+            Row headerRow = sheet.createRow(rowNum++);
+            String[] headers = {"学号", "姓名", "班级", "专业", "平时成绩", "期中成绩", "期末成绩", "总成绩"};
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+            
+            // 添加数据
+            for (Map<String, Object> record : gradeData) {
+                Row dataRow = sheet.createRow(rowNum++);
+                
+                Cell cell0 = dataRow.createCell(0);
+                cell0.setCellValue(record.get("studentId") != null ? record.get("studentId").toString() : "");
+                cell0.setCellStyle(dataStyle);
+                
+                Cell cell1 = dataRow.createCell(1);
+                cell1.setCellValue(record.get("studentName") != null ? record.get("studentName").toString() : "");
+                cell1.setCellStyle(dataStyle);
+                
+                Cell cell2 = dataRow.createCell(2);
+                cell2.setCellValue(record.get("className") != null ? record.get("className").toString() : "");
+                cell2.setCellStyle(dataStyle);
+                
+                Cell cell3 = dataRow.createCell(3);
+                cell3.setCellValue(record.get("major") != null ? record.get("major").toString() : "");
+                cell3.setCellStyle(dataStyle);
+                
+                Cell cell4 = dataRow.createCell(4);
+                cell4.setCellValue(record.get("regularScore") != null ? record.get("regularScore").toString() : "");
+                cell4.setCellStyle(dataStyle);
+                
+                Cell cell5 = dataRow.createCell(5);
+                cell5.setCellValue(record.get("midtermScore") != null ? record.get("midtermScore").toString() : "");
+                cell5.setCellStyle(dataStyle);
+                
+                Cell cell6 = dataRow.createCell(6);
+                cell6.setCellValue(record.get("finalScore") != null ? record.get("finalScore").toString() : "");
+                cell6.setCellStyle(dataStyle);
+                
+                Cell cell7 = dataRow.createCell(7);
+                cell7.setCellValue(record.get("totalScore") != null ? record.get("totalScore").toString() : "");
+                cell7.setCellStyle(dataStyle);
+            }
+            
+            // 自动调整列宽
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+            
+            // 保存文件
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("保存课程成绩分布报表");
+            fileChooser.setFileFilter(new FileNameExtensionFilter("Excel文件 (*.xlsx)", "xlsx"));
+            fileChooser.setSelectedFile(new File(courseName + "_成绩分布报表_" + academicYear + "_" + semester + ".xlsx"));
+            
+            int userSelection = fileChooser.showSaveDialog(parent);
+            if (userSelection == JFileChooser.APPROVE_OPTION) {
+                File fileToSave = fileChooser.getSelectedFile();
+                if (!fileToSave.getName().toLowerCase().endsWith(".xlsx")) {
+                    fileToSave = new File(fileToSave.getAbsolutePath() + ".xlsx");
+                }
+                
+                try (FileOutputStream outputStream = new FileOutputStream(fileToSave)) {
+                    workbook.write(outputStream);
+                    JOptionPane.showMessageDialog(parent, "课程成绩分布报表导出成功！\n文件保存位置: " + fileToSave.getAbsolutePath(), "成功", JOptionPane.INFORMATION_MESSAGE);
+                    parent.dispose();
+                }
+            }
+            
+            workbook.close();
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(parent, "导出失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+    }
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new AdminUI());

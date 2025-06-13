@@ -4,6 +4,7 @@ import dao.GradeDao;
 import dao.GradeDaoImpl;
 import entity.Grade;
 import java.util.List;
+import java.util.Map;
 
 public class GradeServiceImpl implements GradeService {
     private final GradeDao gradeDao = new GradeDaoImpl();
@@ -68,6 +69,32 @@ public class GradeServiceImpl implements GradeService {
             throw new IllegalArgumentException("成绩ID不能为空");
         }
         return gradeDao.getGradeHistory(id);
+    }
+    
+    @Override
+    public List<Map<String, Object>> getGradesWithCourseInfo(String studentId) {
+        if (studentId == null || studentId.isEmpty()) {
+            throw new IllegalArgumentException("学生ID不能为空");
+        }
+        return gradeDao.getGradesWithCourseInfo(studentId);
+    }
+    
+    @Override
+    public List<Map<String, Object>> getClassGradeSummary(String className, String academicYear, String semester) {
+        if (className == null || className.trim().isEmpty()) {
+            throw new IllegalArgumentException("班级名称不能为空");
+        }
+        return gradeDao.getClassGradeSummary(className.trim(), academicYear, semester);
+    }
+    
+    @Override
+    public List<Map<String, Object>> getCourseGradeSummary(String courseId, String academicYear, String semester) {
+        return gradeDao.getCourseGradeSummary(courseId, academicYear, semester);
+    }
+    
+    @Override
+    public Map<String, Object> getCourseGradeStatistics(String courseId, String academicYear, String semester) {
+        return gradeDao.getCourseGradeStatistics(courseId, academicYear, semester);
     }
 
     private void validateScore(Grade grade) {

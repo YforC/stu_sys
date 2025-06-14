@@ -96,13 +96,7 @@ public class AdminUI {
         generateReportsButton.setBorder(BorderFactory.createLineBorder(new Color(0, 102, 204), 1));
         buttonPanel.add(generateReportsButton);
 
-        JButton analyzeGradesButton = new JButton("统计分析成绩");
-        analyzeGradesButton.setFont(new Font("微软雅黑", Font.PLAIN, 10));
-        analyzeGradesButton.setPreferredSize(new Dimension(100, 30));
-        analyzeGradesButton.setBackground(new Color(173, 216, 230));
-        analyzeGradesButton.setFocusPainted(false);
-        analyzeGradesButton.setBorder(BorderFactory.createLineBorder(new Color(0, 102, 204), 1));
-        buttonPanel.add(analyzeGradesButton);
+
 
         JButton logoutButton = new JButton("退出登录");
         logoutButton.setFont(new Font("微软雅黑", Font.PLAIN, 10));
@@ -128,7 +122,7 @@ public class AdminUI {
         manageTeachersButton.addActionListener(e -> showTeacherManagementPanel());
         manageCoursesButton.addActionListener(e -> showCourseManagementPanel());
         generateReportsButton.addActionListener(e -> showReportEntryPanel());
-        analyzeGradesButton.addActionListener(e -> displayArea.setText("统计分析成绩功能尚未实现"));
+
         logoutButton.addActionListener(e -> {
             int confirm = JOptionPane.showConfirmDialog(frame, "确定要退出登录吗？", "确认", JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {

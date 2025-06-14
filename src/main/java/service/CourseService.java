@@ -10,6 +10,7 @@ public interface CourseService {
     List<Course> queryCourses(String name, String type, String semester, String teacherId);
     List<Course> queryCoursesByIds(List<String> courseIds);
     List<Course> queryCoursesByPage(int offset, int limit);
+    List<Course> queryAllCourses();
     int deleteCourse(String id);
 }
 

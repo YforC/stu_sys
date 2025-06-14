@@ -102,6 +102,11 @@ public class CourseServiceImpl implements CourseService {
     }
 
     @Override
+    public List<Course> queryAllCourses() {
+        return courseDao.queryCourses(null, null, null, null);
+    }
+
+    @Override
     public int deleteCourse(String id) {
         if (id == null || id.isEmpty()) {
             throw new IllegalArgumentException("课程编号不能为空");

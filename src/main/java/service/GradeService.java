@@ -56,6 +56,17 @@ public interface GradeService {
     Map<String, Object> getCourseGradeStatistics(String courseId, String academicYear, String semester);
     
     /**
+     * 获取班级成绩统计数据
+     * 计算指定班级的平均分、最高分、最低分、及格率、优秀率等统计信息
+     * 
+     * @param className 班级名称
+     * @param academicYear 学年（可选，为null时查询所有学年）
+     * @param semester 学期（可选，为null时查询所有学期）
+     * @return 班级成绩统计信息Map
+     */
+    Map<String, Object> getClassGradeStatistics(String className, String academicYear, String semester);
+    
+    /**
      * 获取班级成绩排名数据
      * 按照指定条件查询班级学生成绩排名，支持按总分、平均分、单科成绩等排序
      * 

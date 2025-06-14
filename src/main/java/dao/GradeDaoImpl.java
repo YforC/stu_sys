@@ -486,6 +486,71 @@ public class GradeDaoImpl implements GradeDao {
     }
     
     @Override
+    public Map<String, Object> getClassGradeStatistics(String className, String academicYear, String semester) {
+        StringBuilder sql = new StringBuilder(
+            "SELECT " +
+            "COUNT(*) as total_count, " +
+            "AVG(g.total_score) as average_score, " +
+            "MAX(g.total_score) as highest_score, " +
+            "MIN(g.total_score) as lowest_score, " +
+            "SUM(CASE WHEN g.total_score >= 60 THEN 1 ELSE 0 END) as pass_count, " +
+            "SUM(CASE WHEN g.total_score >= 85 THEN 1 ELSE 0 END) as excellent_count, " +
+            "s.class_name " +
+            "FROM grade g " +
+            "JOIN teaching_task t ON g.teaching_task_id = t.id " +
+            "JOIN student s ON g.student_id = s.id " +
+            "WHERE s.class_name = ? AND g.status != '已删除' AND g.total_score IS NOT NULL"
+        );
+        
+        List<Object> params = new ArrayList<>();
+        params.add(className);
+        
+        if (academicYear != null && !academicYear.isEmpty()) {
+            sql.append(" AND t.academic_year = ?");
+            params.add(academicYear);
+        }
+        
+        if (semester != null && !semester.isEmpty()) {
+            sql.append(" AND t.semester = ?");
+            params.add(semester);
+        }
+        
+        sql.append(" GROUP BY s.class_name");
+        
+        Map<String, Object> statistics = new HashMap<>();
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    int totalCount = rs.getInt("total_count");
+                    int passCount = rs.getInt("pass_count");
+                    int excellentCount = rs.getInt("excellent_count");
+                    
+                    statistics.put("className", className);
+                    statistics.put("academicYear", academicYear);
+                    statistics.put("semester", semester);
+                    statistics.put("totalCount", totalCount);
+                    statistics.put("averageScore", Math.round(rs.getDouble("average_score") * 100.0) / 100.0);
+                    statistics.put("highestScore", rs.getDouble("highest_score"));
+                    statistics.put("lowestScore", rs.getDouble("lowest_score"));
+                    statistics.put("passCount", passCount);
+                    statistics.put("excellentCount", excellentCount);
+                    statistics.put("passRate", totalCount > 0 ? Math.round((double) passCount / totalCount * 10000.0) / 100.0 : 0.0);
+                    statistics.put("excellentRate", totalCount > 0 ? Math.round((double) excellentCount / totalCount * 10000.0) / 100.0 : 0.0);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return statistics;
+    }
+    
+    @Override
     public List<Map<String, Object>> getClassGradeRanking(String className, String academicYear, String semester, String rankType, String courseId) {
         List<Map<String, Object>> rankings = new ArrayList<>();
         StringBuilder sql = new StringBuilder();

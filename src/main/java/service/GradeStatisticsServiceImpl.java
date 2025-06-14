@@ -3,10 +3,23 @@ package service;
 import dao.GradeStatisticsDao;
 import dao.GradeStatisticsDaoImpl;
 import entity.GradeStatistics;
+import service.GradeService;
+import service.GradeServiceImpl;
+import service.StudentService;
+import service.StudentServiceImpl;
+import service.CourseService;
+import service.CourseServiceImpl;
+import entity.Student;
+import entity.Course;
 import java.util.List;
+import java.util.Map;
+import java.util.Date;
 
 public class GradeStatisticsServiceImpl implements GradeStatisticsService {
     private final GradeStatisticsDao statisticsDao = new GradeStatisticsDaoImpl();
+    private final GradeService gradeService = new GradeServiceImpl();
+    private final StudentService studentService = new StudentServiceImpl();
+    private final CourseService courseService = new CourseServiceImpl();
 
     @Override
     public int addGradeStatistics(GradeStatistics statistics) {
@@ -58,6 +71,115 @@ public class GradeStatisticsServiceImpl implements GradeStatisticsService {
         if (s.getExcellentRate() != null && (s.getExcellentRate() < 0 || s.getExcellentRate() > 100)) {
             throw new IllegalArgumentException("优秀率应在0-100之间");
         }
+    }
+    
+    @Override
+    public int generateAllStatistics() {
+        int count = 0;
+        
+        // 生成所有班级的统计数据
+        List<Student> allStudents = studentService.queryStudentsByPage(0, Integer.MAX_VALUE);
+        java.util.Set<String> classNames = new java.util.HashSet<>();
+        for (Student student : allStudents) {
+            if (student.getClassName() != null && !student.getClassName().isEmpty()) {
+                classNames.add(student.getClassName());
+            }
+        }
+        
+        for (String className : classNames) {
+            Map<String, Object> stats = gradeService.getClassGradeStatistics(className, null, null);
+            if (stats != null && stats.get("totalCount") != null && (Integer) stats.get("totalCount") > 0) {
+                GradeStatistics gradeStats = createGradeStatisticsFromMap(stats, className, "class");
+                statisticsDao.addGradeStatistics(gradeStats);
+                count++;
+            }
+        }
+        
+        // 生成所有课程的统计数据
+        List<Course> allCourses = courseService.queryAllCourses();
+        for (Course course : allCourses) {
+            Map<String, Object> stats = gradeService.getCourseGradeStatistics(course.getId(), null, null);
+            if (stats != null && stats.get("totalCount") != null && (Integer) stats.get("totalCount") > 0) {
+                GradeStatistics gradeStats = createGradeStatisticsFromMap(stats, course.getId(), "course");
+                statisticsDao.addGradeStatistics(gradeStats);
+                count++;
+            }
+        }
+        
+        return count;
+    }
+    
+    @Override
+    public int generateSelectedStatistics(String type, String academicYear, String semester) {
+        int count = 0;
+        
+        if ("class".equals(type)) {
+            // 生成班级统计数据
+            List<Student> allStudents = studentService.queryStudentsByPage(0, Integer.MAX_VALUE);
+            java.util.Set<String> classNames = new java.util.HashSet<>();
+            for (Student student : allStudents) {
+                if (student.getClassName() != null && !student.getClassName().isEmpty()) {
+                    classNames.add(student.getClassName());
+                }
+            }
+            
+            for (String className : classNames) {
+                Map<String, Object> stats = gradeService.getClassGradeStatistics(className, academicYear, semester);
+                if (stats != null && stats.get("totalCount") != null && (Integer) stats.get("totalCount") > 0) {
+                    GradeStatistics gradeStats = createGradeStatisticsFromMap(stats, className, "class");
+                    gradeStats.setAcademicYear(academicYear);
+                    gradeStats.setSemester(semester);
+                    statisticsDao.addGradeStatistics(gradeStats);
+                    count++;
+                }
+            }
+        } else if ("course".equals(type)) {
+            // 生成课程统计数据
+            List<Course> allCourses = courseService.queryAllCourses();
+            for (Course course : allCourses) {
+                Map<String, Object> stats = gradeService.getCourseGradeStatistics(course.getId(), academicYear, semester);
+                if (stats != null && stats.get("totalCount") != null && (Integer) stats.get("totalCount") > 0) {
+                    GradeStatistics gradeStats = createGradeStatisticsFromMap(stats, course.getId(), "course");
+                    gradeStats.setAcademicYear(academicYear);
+                    gradeStats.setSemester(semester);
+                    statisticsDao.addGradeStatistics(gradeStats);
+                    count++;
+                }
+            }
+        }
+        
+        return count;
+    }
+    
+    private GradeStatistics createGradeStatisticsFromMap(Map<String, Object> stats, String objectId, String type) {
+        GradeStatistics gradeStats = new GradeStatistics();
+        gradeStats.setObjectId(objectId);
+        gradeStats.setType(type);
+        gradeStats.setAcademicYear((String) stats.get("academicYear"));
+        gradeStats.setSemester((String) stats.get("semester"));
+        
+        // 安全的类型转换，处理可能的BigDecimal类型
+        Object avgScore = stats.get("averageScore");
+        gradeStats.setAverageScore(avgScore != null ? ((Number) avgScore).doubleValue() : null);
+        
+        Object highScore = stats.get("highestScore");
+        gradeStats.setHighestScore(highScore != null ? ((Number) highScore).doubleValue() : null);
+        
+        Object lowScore = stats.get("lowestScore");
+        gradeStats.setLowestScore(lowScore != null ? ((Number) lowScore).doubleValue() : null);
+        
+        gradeStats.setPassCount((Integer) stats.get("passCount"));
+        
+        Object passRateObj = stats.get("passRate");
+        gradeStats.setPassRate(passRateObj != null ? ((Number) passRateObj).doubleValue() : null);
+        
+        gradeStats.setExcellentCount((Integer) stats.get("excellentCount"));
+        
+        Object excellentRateObj = stats.get("excellentRate");
+        gradeStats.setExcellentRate(excellentRateObj != null ? ((Number) excellentRateObj).doubleValue() : null);
+        
+        gradeStats.setStatisticsTime(new Date());
+        return gradeStats;
     }
 }
 

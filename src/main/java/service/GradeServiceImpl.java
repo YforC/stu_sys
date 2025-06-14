@@ -98,6 +98,11 @@ public class GradeServiceImpl implements GradeService {
     }
     
     @Override
+    public Map<String, Object> getClassGradeStatistics(String className, String academicYear, String semester) {
+        return gradeDao.getClassGradeStatistics(className, academicYear, semester);
+    }
+    
+    @Override
     public List<Map<String, Object>> getClassGradeRanking(String className, String academicYear, String semester, String rankType, String courseId) {
         if (className == null || className.trim().isEmpty()) {
             throw new IllegalArgumentException("班级名称不能为空");

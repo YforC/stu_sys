@@ -3,6 +3,7 @@ package ui;
 import entity.Student;
 import entity.Teacher;
 import entity.Course;
+import entity.TeachingTask;
 import java.awt.Font;
 import service.StudentService;
 import service.StudentServiceImpl;
@@ -12,6 +13,8 @@ import service.CourseService;
 import service.CourseServiceImpl;
 import service.GradeService;
 import service.GradeServiceImpl;
+import service.TeachingTaskService;
+import service.TeachingTaskServiceImpl;
 import entity.Grade;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
@@ -39,6 +42,9 @@ public class AdminUI {
     private JFrame frame;
     private StudentService studentService = new StudentServiceImpl();
     private GradeService gradeService = new GradeServiceImpl();
+    private TeachingTaskService teachingTaskService = new TeachingTaskServiceImpl();
+    private TeacherService teacherService = new TeacherServiceImpl();
+    private CourseService courseService = new CourseServiceImpl();
     private JTable studentTable;
     private DefaultTableModel studentTableModel;
     private JTextField searchField;
@@ -96,13 +102,13 @@ public class AdminUI {
         generateReportsButton.setBorder(BorderFactory.createLineBorder(new Color(0, 102, 204), 1));
         buttonPanel.add(generateReportsButton);
 
-        JButton analyzeGradesButton = new JButton("统计分析成绩");
-        analyzeGradesButton.setFont(new Font("微软雅黑", Font.PLAIN, 10));
-        analyzeGradesButton.setPreferredSize(new Dimension(100, 30));
-        analyzeGradesButton.setBackground(new Color(173, 216, 230));
-        analyzeGradesButton.setFocusPainted(false);
-        analyzeGradesButton.setBorder(BorderFactory.createLineBorder(new Color(0, 102, 204), 1));
-        buttonPanel.add(analyzeGradesButton);
+        JButton assignTaskButton = new JButton("分配教学任务");
+        assignTaskButton.setFont(new Font("微软雅黑", Font.PLAIN, 10));
+        assignTaskButton.setPreferredSize(new Dimension(100, 30));
+        assignTaskButton.setBackground(new Color(173, 216, 230));
+        assignTaskButton.setFocusPainted(false);
+        assignTaskButton.setBorder(BorderFactory.createLineBorder(new Color(0, 102, 204), 1));
+        buttonPanel.add(assignTaskButton);
 
         JButton logoutButton = new JButton("退出登录");
         logoutButton.setFont(new Font("微软雅黑", Font.PLAIN, 10));
@@ -128,7 +134,8 @@ public class AdminUI {
         manageTeachersButton.addActionListener(e -> showTeacherManagementPanel());
         manageCoursesButton.addActionListener(e -> showCourseManagementPanel());
         generateReportsButton.addActionListener(e -> showReportEntryPanel());
-        analyzeGradesButton.addActionListener(e -> displayArea.setText("统计分析成绩功能尚未实现"));
+        assignTaskButton.addActionListener(e -> showTeachingTaskManagementPanel());
+
         logoutButton.addActionListener(e -> {
             int confirm = JOptionPane.showConfirmDialog(frame, "确定要退出登录吗？", "确认", JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {
@@ -1033,7 +1040,8 @@ public class AdminUI {
             "成绩排名报表",
             "不及格名单报表",
             "优秀学生名单报表",
-            "成绩趋势分析报表"
+            "成绩趋势分析报表",
+            "生成成绩统计"
         };
         for (String name : btnNames) {
             JButton btn = new JButton(name);
@@ -1057,6 +1065,8 @@ public class AdminUI {
                 btn.addActionListener(e -> showExcellentStudentsDialog(dialog));
             } else if (name.equals("成绩趋势分析报表")) {
                 btn.addActionListener(e -> showGradeTrendAnalysisDialog());
+            } else if (name.equals("生成成绩统计")) {
+                btn.addActionListener(e -> showGenerateStatisticsDialog(dialog));
             }
             // 其他按钮的事件处理后续实现
         }
@@ -2517,6 +2527,1045 @@ public class AdminUI {
         });
         
         dialog.add(mainPanel);
+        dialog.setVisible(true);
+    }
+
+    private void showGenerateStatisticsDialog(JDialog parent) {
+        JDialog dialog = new JDialog(parent, "生成成绩统计", true);
+        dialog.setSize(500, 400);
+        dialog.setLocationRelativeTo(parent);
+        dialog.setLayout(new BorderLayout());
+        
+        // 标题
+        JLabel titleLabel = new JLabel("成绩统计生成", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("微软雅黑", Font.BOLD, 18));
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(15, 0, 15, 0));
+        dialog.add(titleLabel, BorderLayout.NORTH);
+        
+        // 主面板
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+        
+        // 选择面板
+        JPanel selectionPanel = new JPanel(new GridBagLayout());
+        selectionPanel.setBorder(BorderFactory.createTitledBorder("统计范围选择"));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        // 统计类型选择
+        gbc.gridx = 0; gbc.gridy = 0;
+        selectionPanel.add(new JLabel("统计类型:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> typeCombo = new JComboBox<>(new String[]{"课程统计", "班级统计", "教师统计"});
+        selectionPanel.add(typeCombo, gbc);
+        
+        // 学年选择
+        gbc.gridx = 0; gbc.gridy = 1;
+        selectionPanel.add(new JLabel("学年:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> yearCombo = new JComboBox<>(new String[]{"2023-2024", "2022-2023", "2021-2022"});
+        selectionPanel.add(yearCombo, gbc);
+        
+        // 学期选择
+        gbc.gridx = 0; gbc.gridy = 2;
+        selectionPanel.add(new JLabel("学期:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> semesterCombo = new JComboBox<>(new String[]{"春", "秋", "全年"});
+        selectionPanel.add(semesterCombo, gbc);
+        
+        mainPanel.add(selectionPanel, BorderLayout.NORTH);
+        
+        // 操作按钮面板
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton generateAllBtn = new JButton("生成全部统计");
+        JButton generateSelectedBtn = new JButton("生成选定统计");
+        JButton viewStatisticsBtn = new JButton("查看统计数据");
+        JButton closeBtn = new JButton("关闭");
+        
+        generateAllBtn.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        generateSelectedBtn.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        viewStatisticsBtn.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        closeBtn.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        
+        buttonPanel.add(generateAllBtn);
+        buttonPanel.add(generateSelectedBtn);
+        buttonPanel.add(viewStatisticsBtn);
+        buttonPanel.add(closeBtn);
+        
+        // 结果显示区域
+        JTextArea resultArea = new JTextArea(10, 40);
+        resultArea.setEditable(false);
+        resultArea.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+        JScrollPane scrollPane = new JScrollPane(resultArea);
+        scrollPane.setBorder(BorderFactory.createTitledBorder("操作结果"));
+        mainPanel.add(scrollPane, BorderLayout.CENTER);
+        mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+        
+        // 按钮事件处理
+        generateAllBtn.addActionListener(e -> {
+            resultArea.setText("正在生成全部统计数据...\n");
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    generateAllStatistics(resultArea);
+                } catch (Exception ex) {
+                    resultArea.append("生成统计数据时发生错误: " + ex.getMessage() + "\n");
+                    ex.printStackTrace();
+                }
+            });
+        });
+        
+        generateSelectedBtn.addActionListener(e -> {
+            String type = (String) typeCombo.getSelectedItem();
+            String year = (String) yearCombo.getSelectedItem();
+            String semester = (String) semesterCombo.getSelectedItem();
+            
+            resultArea.setText("正在生成选定统计数据...\n");
+            resultArea.append("统计类型: " + type + "\n");
+            resultArea.append("学年: " + year + "\n");
+            resultArea.append("学期: " + semester + "\n\n");
+            
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    generateSelectedStatistics(type, year, semester, resultArea);
+                } catch (Exception ex) {
+                    resultArea.append("生成统计数据时发生错误: " + ex.getMessage() + "\n");
+                    ex.printStackTrace();
+                }
+            });
+        });
+        
+        viewStatisticsBtn.addActionListener(e -> {
+            showStatisticsViewDialog(dialog);
+        });
+        
+        closeBtn.addActionListener(e -> dialog.dispose());
+        
+        dialog.add(mainPanel, BorderLayout.CENTER);
+        dialog.setVisible(true);
+    }
+    
+    private void generateAllStatistics(JTextArea resultArea) {
+        try {
+            service.GradeStatisticsService statisticsService = new service.GradeStatisticsServiceImpl();
+            service.GradeService gradeService = new service.GradeServiceImpl();
+            
+            // 获取所有课程
+            List<Map<String, Object>> courses = gradeService.getAllCourses();
+            resultArea.append("开始生成课程统计数据...\n");
+            
+            int courseCount = 0;
+            for (Map<String, Object> course : courses) {
+                String courseId = (String) course.get("id");
+                String courseName = (String) course.get("name");
+                
+                // 为每个学年学期生成统计
+                String[] years = {"2023-2024", "2022-2023"};
+                String[] semesters = {"春", "秋"};
+                
+                for (String year : years) {
+                    for (String semester : semesters) {
+                        Map<String, Object> stats = gradeService.getCourseGradeStatistics(courseId, year, semester);
+                        if (stats != null && stats.get("totalCount") != null && (Integer)stats.get("totalCount") > 0) {
+                            entity.GradeStatistics gradeStats = new entity.GradeStatistics();
+                            gradeStats.setObjectId(courseId);
+                            gradeStats.setType("课程");
+                            gradeStats.setAcademicYear(year);
+                            gradeStats.setSemester(semester);
+                            gradeStats.setAverageScore(Double.valueOf(stats.get("averageScore").toString()));
+                        gradeStats.setHighestScore(Double.valueOf(stats.get("highestScore").toString()));
+                        gradeStats.setLowestScore(Double.valueOf(stats.get("lowestScore").toString()));
+                        gradeStats.setPassCount((Integer)stats.get("passCount"));
+                        gradeStats.setPassRate(Double.valueOf(stats.get("passRate").toString()));
+                        gradeStats.setExcellentCount((Integer)stats.get("excellentCount"));
+                        gradeStats.setExcellentRate(Double.valueOf(stats.get("excellentRate").toString()));
+                            gradeStats.setStatisticsTime(new java.util.Date());
+                            
+                            statisticsService.addGradeStatistics(gradeStats);
+                            courseCount++;
+                        }
+                    }
+                }
+                resultArea.append("已生成课程 [" + courseName + "] 的统计数据\n");
+            }
+            
+            // 获取所有班级并生成统计
+            List<String> classNames = gradeService.getAllClassNames();
+            resultArea.append("\n开始生成班级统计数据...\n");
+            
+            int classCount = 0;
+            for (String className : classNames) {
+                String[] years = {"2023-2024", "2022-2023"};
+                String[] semesters = {"春", "秋"};
+                
+                for (String year : years) {
+                    for (String semester : semesters) {
+                        Map<String, Object> stats = gradeService.getClassGradeStatistics(className, year, semester);
+                        if (stats != null && stats.get("totalCount") != null && (Integer)stats.get("totalCount") > 0) {
+                            entity.GradeStatistics gradeStats = new entity.GradeStatistics();
+                            gradeStats.setObjectId(className);
+                            gradeStats.setType("班级");
+                            gradeStats.setAcademicYear(year);
+                            gradeStats.setSemester(semester);
+                            gradeStats.setAverageScore(Double.valueOf(stats.get("averageScore").toString()));
+                        gradeStats.setHighestScore(Double.valueOf(stats.get("highestScore").toString()));
+                        gradeStats.setLowestScore(Double.valueOf(stats.get("lowestScore").toString()));
+                        gradeStats.setPassCount((Integer)stats.get("passCount"));
+                        gradeStats.setPassRate(Double.valueOf(stats.get("passRate").toString()));
+                        gradeStats.setExcellentCount((Integer)stats.get("excellentCount"));
+                        gradeStats.setExcellentRate(Double.valueOf(stats.get("excellentRate").toString()));
+                            gradeStats.setStatisticsTime(new java.util.Date());
+                            
+                            statisticsService.addGradeStatistics(gradeStats);
+                            classCount++;
+                        }
+                    }
+                }
+                resultArea.append("已生成班级 [" + className + "] 的统计数据\n");
+            }
+            
+            resultArea.append("\n=== 统计生成完成 ===\n");
+            resultArea.append("课程统计记录: " + courseCount + " 条\n");
+            resultArea.append("班级统计记录: " + classCount + " 条\n");
+            resultArea.append("总计: " + (courseCount + classCount) + " 条统计记录\n");
+            
+        } catch (Exception e) {
+            resultArea.append("生成统计数据时发生错误: " + e.getMessage() + "\n");
+            e.printStackTrace();
+        }
+    }
+    
+    private void generateSelectedStatistics(String type, String year, String semester, JTextArea resultArea) {
+        try {
+            service.GradeStatisticsService statisticsService = new service.GradeStatisticsServiceImpl();
+            service.GradeService gradeService = new service.GradeServiceImpl();
+            
+            int count = 0;
+            
+            if ("课程统计".equals(type)) {
+                List<Map<String, Object>> courses = gradeService.getAllCourses();
+                for (Map<String, Object> course : courses) {
+                    String courseId = (String) course.get("id");
+                    String courseName = (String) course.get("name");
+                    
+                    Map<String, Object> stats = gradeService.getCourseGradeStatistics(courseId, year, semester);
+                    if (stats != null && stats.get("totalCount") != null && (Integer)stats.get("totalCount") > 0) {
+                        entity.GradeStatistics gradeStats = new entity.GradeStatistics();
+                        gradeStats.setObjectId(courseId);
+                        gradeStats.setType("课程");
+                        gradeStats.setAcademicYear(year);
+                        gradeStats.setSemester(semester);
+                        gradeStats.setAverageScore(Double.valueOf(stats.get("averageScore").toString()));
+                        gradeStats.setHighestScore(Double.valueOf(stats.get("highestScore").toString()));
+                        gradeStats.setLowestScore(Double.valueOf(stats.get("lowestScore").toString()));
+                        gradeStats.setPassCount((Integer)stats.get("passCount"));
+                        gradeStats.setPassRate(Double.valueOf(stats.get("passRate").toString()));
+                        gradeStats.setExcellentCount((Integer)stats.get("excellentCount"));
+                        gradeStats.setExcellentRate(Double.valueOf(stats.get("excellentRate").toString()));
+                        gradeStats.setStatisticsTime(new java.util.Date());
+                        
+                        statisticsService.addGradeStatistics(gradeStats);
+                        count++;
+                        resultArea.append("已生成课程 [" + courseName + "] 的统计数据\n");
+                    }
+                }
+            } else if ("班级统计".equals(type)) {
+                List<String> classNames = gradeService.getAllClassNames();
+                for (String className : classNames) {
+                    Map<String, Object> stats = gradeService.getClassGradeStatistics(className, year, semester);
+                    if (stats != null && stats.get("totalCount") != null && (Integer)stats.get("totalCount") > 0) {
+                        entity.GradeStatistics gradeStats = new entity.GradeStatistics();
+                        gradeStats.setObjectId(className);
+                        gradeStats.setType("班级");
+                        gradeStats.setAcademicYear(year);
+                        gradeStats.setSemester(semester);
+                        gradeStats.setAverageScore(Double.valueOf(stats.get("averageScore").toString()));
+                        gradeStats.setHighestScore(Double.valueOf(stats.get("highestScore").toString()));
+                        gradeStats.setLowestScore(Double.valueOf(stats.get("lowestScore").toString()));
+                        gradeStats.setPassCount((Integer)stats.get("passCount"));
+                        gradeStats.setPassRate(Double.valueOf(stats.get("passRate").toString()));
+                        gradeStats.setExcellentCount((Integer)stats.get("excellentCount"));
+                        gradeStats.setExcellentRate(Double.valueOf(stats.get("excellentRate").toString()));
+                        gradeStats.setStatisticsTime(new java.util.Date());
+                        
+                        statisticsService.addGradeStatistics(gradeStats);
+                        count++;
+                        resultArea.append("已生成班级 [" + className + "] 的统计数据\n");
+                    }
+                }
+            }
+            
+            resultArea.append("\n=== 选定统计生成完成 ===\n");
+            resultArea.append("生成统计记录: " + count + " 条\n");
+            
+        } catch (Exception e) {
+            resultArea.append("生成统计数据时发生错误: " + e.getMessage() + "\n");
+            e.printStackTrace();
+        }
+    }
+    
+    private void showStatisticsViewDialog(JDialog parent) {
+        JDialog dialog = new JDialog(parent, "统计数据查看", true);
+        dialog.setSize(800, 600);
+        dialog.setLocationRelativeTo(parent);
+        dialog.setLayout(new BorderLayout());
+        
+        // 查询条件面板
+        JPanel queryPanel = new JPanel(new FlowLayout());
+        queryPanel.setBorder(BorderFactory.createTitledBorder("查询条件"));
+        
+        queryPanel.add(new JLabel("对象ID:"));
+        JTextField objectIdField = new JTextField(10);
+        queryPanel.add(objectIdField);
+        
+        queryPanel.add(new JLabel("类型:"));
+        JComboBox<String> typeCombo = new JComboBox<>(new String[]{"", "课程", "班级", "教师"});
+        queryPanel.add(typeCombo);
+        
+        queryPanel.add(new JLabel("学年:"));
+        JComboBox<String> yearCombo = new JComboBox<>(new String[]{"", "2023-2024", "2022-2023", "2021-2022"});
+        queryPanel.add(yearCombo);
+        
+        queryPanel.add(new JLabel("学期:"));
+        JComboBox<String> semesterCombo = new JComboBox<>(new String[]{"", "春", "秋", "全年"});
+        queryPanel.add(semesterCombo);
+        
+        JButton queryBtn = new JButton("查询");
+        queryPanel.add(queryBtn);
+        
+        dialog.add(queryPanel, BorderLayout.NORTH);
+        
+        // 结果显示表格
+        String[] columnNames = {"ID", "对象ID", "类型", "学年", "学期", "平均分", "最高分", "最低分", "及格人数", "及格率", "优秀人数", "优秀率", "统计时间"};
+        javax.swing.table.DefaultTableModel tableModel = new javax.swing.table.DefaultTableModel(columnNames, 0);
+        JTable table = new JTable(tableModel);
+        table.setFont(new Font("微软雅黑", Font.PLAIN, 11));
+        table.getTableHeader().setFont(new Font("微软雅黑", Font.BOLD, 11));
+        
+        JScrollPane tableScrollPane = new JScrollPane(table);
+        dialog.add(tableScrollPane, BorderLayout.CENTER);
+        
+        // 查询按钮事件
+        queryBtn.addActionListener(e -> {
+            try {
+                service.GradeStatisticsService statisticsService = new service.GradeStatisticsServiceImpl();
+                
+                String objectId = objectIdField.getText().trim();
+                String type = (String) typeCombo.getSelectedItem();
+                String year = (String) yearCombo.getSelectedItem();
+                String semester = (String) semesterCombo.getSelectedItem();
+                
+                // 处理空字符串
+                if (objectId.isEmpty()) objectId = null;
+                if ("".equals(type)) type = null;
+                if ("".equals(year)) year = null;
+                if ("".equals(semester)) semester = null;
+                
+                List<entity.GradeStatistics> statistics = statisticsService.queryStatistics(objectId, type, year, semester);
+                
+                // 清空表格
+                tableModel.setRowCount(0);
+                
+                // 填充数据
+                for (entity.GradeStatistics stat : statistics) {
+                    Object[] row = {
+                        stat.getId(),
+                        stat.getObjectId(),
+                        stat.getType(),
+                        stat.getAcademicYear(),
+                        stat.getSemester(),
+                        stat.getAverageScore(),
+                        stat.getHighestScore(),
+                        stat.getLowestScore(),
+                        stat.getPassCount(),
+                        stat.getPassRate() + "%",
+                        stat.getExcellentCount(),
+                        stat.getExcellentRate() + "%",
+                        new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(stat.getStatisticsTime())
+                    };
+                    tableModel.addRow(row);
+                }
+                
+                if (statistics.isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "未找到符合条件的统计数据", "提示", JOptionPane.INFORMATION_MESSAGE);
+                }
+                
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "查询失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                ex.printStackTrace();
+            }
+        });
+        
+        // 关闭按钮
+        JPanel bottomPanel = new JPanel(new FlowLayout());
+        JButton closeBtn = new JButton("关闭");
+        closeBtn.addActionListener(e -> dialog.dispose());
+        bottomPanel.add(closeBtn);
+        dialog.add(bottomPanel, BorderLayout.SOUTH);
+        
+        dialog.setVisible(true);
+    }
+
+    private void showTeachingTaskManagementPanel() {
+        // 创建教学任务管理窗口
+        JDialog dialog = new JDialog(frame, "教学任务分配管理", true);
+        dialog.setSize(1200, 700);
+        dialog.setLocationRelativeTo(null);
+        dialog.setLayout(new BorderLayout());
+
+        // 顶部操作面板
+        JPanel topPanel = new JPanel(new BorderLayout());
+        
+        // 搜索面板
+        JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        searchPanel.add(new JLabel("搜索条件:"));
+        
+        JComboBox<String> searchTypeCombo = new JComboBox<>(new String[]{"全部", "教师ID", "课程ID", "学年", "学期", "班级"});
+        searchPanel.add(searchTypeCombo);
+        
+        JTextField searchField = new JTextField(15);
+        searchPanel.add(searchField);
+        
+        JButton searchButton = new JButton("搜索");
+        searchPanel.add(searchButton);
+        
+        topPanel.add(searchPanel, BorderLayout.WEST);
+        
+        // 操作按钮面板
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton addButton = new JButton("新增任务");
+        JButton refreshButton = new JButton("刷新");
+        buttonPanel.add(addButton);
+        buttonPanel.add(refreshButton);
+        
+        topPanel.add(buttonPanel, BorderLayout.EAST);
+        dialog.add(topPanel, BorderLayout.NORTH);
+
+        // 创建教学任务表格
+        String[] columns = {"任务ID", "课程ID", "课程名称", "教师ID", "教师姓名", "学年", "学期", "班级", "上课时间", "上课地点", "状态", "操作"};
+        DefaultTableModel tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return column == columns.length - 1; // 只有操作列可编辑
+            }
+        };
+        
+        JTable taskTable = new JTable(tableModel);
+        taskTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+        
+        // 设置操作列的渲染器和编辑器
+        taskTable.getColumnModel().getColumn(columns.length - 1).setCellRenderer(new TaskButtonRenderer());
+        taskTable.getColumnModel().getColumn(columns.length - 1).setCellEditor(new TaskButtonEditor(new JTextField(), tableModel, dialog));
+        
+        JScrollPane scrollPane = new JScrollPane(taskTable);
+        dialog.add(scrollPane, BorderLayout.CENTER);
+
+        // 加载教学任务数据的方法
+        Runnable loadTasks = () -> {
+            try {
+                List<TeachingTask> tasks = teachingTaskService.queryTeachingTasksByPage(0, 1000);
+                tableModel.setRowCount(0);
+                
+                for (TeachingTask task : tasks) {
+                    // 获取课程名称
+                    String courseName = "";
+                    try {
+                        Course course = courseService.getCourseById(task.getCourseId());
+                         if (course != null) {
+                             courseName = course.getName();
+                         }
+                    } catch (Exception e) {
+                        courseName = "未知课程";
+                    }
+                    
+                    // 获取教师姓名
+                    String teacherName = "";
+                    try {
+                        Teacher teacher = teacherService.getTeacherById(task.getTeacherId());
+                        if (teacher != null) {
+                            teacherName = teacher.getName();
+                        }
+                    } catch (Exception e) {
+                        teacherName = "未知教师";
+                    }
+                    
+                    Object[] row = {
+                        task.getId(),
+                        task.getCourseId(),
+                        courseName,
+                        task.getTeacherId(),
+                        teacherName,
+                        task.getAcademicYear(),
+                        task.getSemester(),
+                        task.getClassName(),
+                        task.getClassTime(),
+                        task.getLocation(),
+                        task.getStatus(),
+                        "操作"
+                    };
+                    tableModel.addRow(row);
+                }
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(dialog, "加载教学任务失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+            }
+        };
+
+        // 搜索功能
+        searchButton.addActionListener(e -> {
+            String searchType = (String) searchTypeCombo.getSelectedItem();
+            String searchValue = searchField.getText().trim();
+            
+            try {
+                List<TeachingTask> tasks;
+                if ("全部".equals(searchType) || searchValue.isEmpty()) {
+                    tasks = teachingTaskService.queryTeachingTasksByPage(0, 1000);
+                } else {
+                    // 根据搜索类型进行查询
+                    String courseId = "课程ID".equals(searchType) ? searchValue : null;
+                    String teacherId = "教师ID".equals(searchType) ? searchValue : null;
+                    String academicYear = "学年".equals(searchType) ? searchValue : null;
+                    String semester = "学期".equals(searchType) ? searchValue : null;
+                    String className = "班级".equals(searchType) ? searchValue : null;
+                    
+                    tasks = teachingTaskService.queryTeachingTasks(courseId, teacherId, academicYear, semester, className);
+                }
+                
+                tableModel.setRowCount(0);
+                for (TeachingTask task : tasks) {
+                    // 获取课程名称和教师姓名的逻辑同上
+                    String courseName = "";
+                    try {
+                        Course course = courseService.getCourseById(task.getCourseId());
+                     if (course != null) {
+                         courseName = course.getName();
+                     }
+                    } catch (Exception ex) {
+                        courseName = "未知课程";
+                    }
+                    
+                    String teacherName = "";
+                    try {
+                        Teacher teacher = teacherService.getTeacherById(task.getTeacherId());
+                        if (teacher != null) {
+                            teacherName = teacher.getName();
+                        }
+                    } catch (Exception ex) {
+                        teacherName = "未知教师";
+                    }
+                    
+                    Object[] row = {
+                        task.getId(),
+                        task.getCourseId(),
+                        courseName,
+                        task.getTeacherId(),
+                        teacherName,
+                        task.getAcademicYear(),
+                        task.getSemester(),
+                        task.getClassName(),
+                        task.getClassTime(),
+                        task.getLocation(),
+                        task.getStatus(),
+                        "操作"
+                    };
+                    tableModel.addRow(row);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "搜索失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        // 新增任务按钮
+        addButton.addActionListener(e -> showAddTeachingTaskDialog(dialog, loadTasks));
+        
+        // 刷新按钮
+        refreshButton.addActionListener(e -> loadTasks.run());
+
+        // 初始加载数据
+        loadTasks.run();
+        
+        dialog.setVisible(true);
+    }
+
+    private void showAddTeachingTaskDialog(JDialog parent, Runnable refreshCallback) {
+        JDialog dialog = new JDialog(parent, "新增教学任务", true);
+        dialog.setSize(500, 400);
+        dialog.setLocationRelativeTo(parent);
+        dialog.setLayout(new BorderLayout());
+
+        // 表单面板
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+
+        // 任务ID
+        gbc.gridx = 0; gbc.gridy = 0;
+        formPanel.add(new JLabel("任务ID:"), gbc);
+        gbc.gridx = 1;
+        JTextField taskIdField = new JTextField(20);
+        formPanel.add(taskIdField, gbc);
+
+        // 课程选择
+        gbc.gridx = 0; gbc.gridy = 1;
+        formPanel.add(new JLabel("课程:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<Course> courseCombo = new JComboBox<>();
+        try {
+            List<Course> courses = courseService.queryAllCourses();
+            for (Course course : courses) {
+                courseCombo.addItem(course);
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(dialog, "加载课程列表失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+        courseCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof Course) {
+                     Course course = (Course) value;
+                     setText(course.getId() + " - " + course.getName());
+                 }
+                return this;
+            }
+        });
+        formPanel.add(courseCombo, gbc);
+
+        // 教师选择
+        gbc.gridx = 0; gbc.gridy = 2;
+        formPanel.add(new JLabel("教师:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<Teacher> teacherCombo = new JComboBox<>();
+        try {
+            List<Teacher> teachers = teacherService.queryTeachersByPage(0, 1000);
+            for (Teacher teacher : teachers) {
+                teacherCombo.addItem(teacher);
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(dialog, "加载教师列表失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+        teacherCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof Teacher) {
+                    Teacher teacher = (Teacher) value;
+                    setText(teacher.getId() + " - " + teacher.getName());
+                }
+                return this;
+            }
+        });
+        formPanel.add(teacherCombo, gbc);
+
+        // 学年
+        gbc.gridx = 0; gbc.gridy = 3;
+        formPanel.add(new JLabel("学年:"), gbc);
+        gbc.gridx = 1;
+        JTextField academicYearField = new JTextField(20);
+        academicYearField.setText("2024-2025"); // 默认值
+        formPanel.add(academicYearField, gbc);
+
+        // 学期
+        gbc.gridx = 0; gbc.gridy = 4;
+        formPanel.add(new JLabel("学期:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> semesterCombo = new JComboBox<>(new String[]{"第一学期", "第二学期"});
+        formPanel.add(semesterCombo, gbc);
+
+        // 班级
+        gbc.gridx = 0; gbc.gridy = 5;
+        formPanel.add(new JLabel("班级:"), gbc);
+        gbc.gridx = 1;
+        JTextField classNameField = new JTextField(20);
+        formPanel.add(classNameField, gbc);
+
+        // 上课时间
+        gbc.gridx = 0; gbc.gridy = 6;
+        formPanel.add(new JLabel("上课时间:"), gbc);
+        gbc.gridx = 1;
+        JTextField classTimeField = new JTextField(20);
+        formPanel.add(classTimeField, gbc);
+
+        // 上课地点
+        gbc.gridx = 0; gbc.gridy = 7;
+        formPanel.add(new JLabel("上课地点:"), gbc);
+        gbc.gridx = 1;
+        JTextField locationField = new JTextField(20);
+        formPanel.add(locationField, gbc);
+
+        // 状态
+        gbc.gridx = 0; gbc.gridy = 8;
+        formPanel.add(new JLabel("状态:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> statusCombo = new JComboBox<>(new String[]{"待开始", "进行中", "已结束"});
+        formPanel.add(statusCombo, gbc);
+
+        dialog.add(formPanel, BorderLayout.CENTER);
+
+        // 按钮面板
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton saveButton = new JButton("保存");
+        JButton cancelButton = new JButton("取消");
+        
+        saveButton.addActionListener(e -> {
+            try {
+                // 验证输入
+                if (taskIdField.getText().trim().isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "请输入任务ID", "错误", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                if (courseCombo.getSelectedItem() == null) {
+                    JOptionPane.showMessageDialog(dialog, "请选择课程", "错误", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                if (teacherCombo.getSelectedItem() == null) {
+                    JOptionPane.showMessageDialog(dialog, "请选择教师", "错误", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                if (classNameField.getText().trim().isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "请输入班级", "错误", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                // 创建教学任务对象
+                TeachingTask task = new TeachingTask();
+                task.setId(taskIdField.getText().trim());
+                task.setCourseId(((Course) courseCombo.getSelectedItem()).getId());
+                task.setTeacherId(((Teacher) teacherCombo.getSelectedItem()).getId());
+                task.setAcademicYear(academicYearField.getText().trim());
+                task.setSemester((String) semesterCombo.getSelectedItem());
+                task.setClassName(classNameField.getText().trim());
+                task.setClassTime(classTimeField.getText().trim());
+                task.setLocation(locationField.getText().trim());
+                task.setStatus((String) statusCombo.getSelectedItem());
+
+                // 保存教学任务
+                int result = teachingTaskService.addTeachingTask(task);
+                if (result > 0) {
+                    JOptionPane.showMessageDialog(dialog, "教学任务添加成功", "成功", JOptionPane.INFORMATION_MESSAGE);
+                    dialog.dispose();
+                    refreshCallback.run(); // 刷新父窗口数据
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "教学任务添加失败", "错误", JOptionPane.ERROR_MESSAGE);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "保存失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(saveButton);
+        buttonPanel.add(cancelButton);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+
+        dialog.setVisible(true);
+    }
+
+    // 教学任务表格操作按钮渲染器
+    class TaskButtonRenderer extends JPanel implements TableCellRenderer {
+        private JButton editButton;
+        private JButton deleteButton;
+
+        public TaskButtonRenderer() {
+            setLayout(new FlowLayout(FlowLayout.CENTER, 2, 0));
+            editButton = new JButton("编辑");
+            deleteButton = new JButton("删除");
+            editButton.setPreferredSize(new Dimension(50, 25));
+            deleteButton.setPreferredSize(new Dimension(50, 25));
+            add(editButton);
+            add(deleteButton);
+        }
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            return this;
+        }
+    }
+
+    // 教学任务表格操作按钮编辑器
+    class TaskButtonEditor extends DefaultCellEditor {
+        private JPanel panel;
+        private JButton editButton;
+        private JButton deleteButton;
+        private DefaultTableModel tableModel;
+        private JDialog parentDialog;
+        private int currentRow;
+
+        public TaskButtonEditor(JTextField textField, DefaultTableModel tableModel, JDialog parentDialog) {
+            super(textField);
+            this.tableModel = tableModel;
+            this.parentDialog = parentDialog;
+            
+            panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 2, 0));
+            editButton = new JButton("编辑");
+            deleteButton = new JButton("删除");
+            editButton.setPreferredSize(new Dimension(50, 25));
+            deleteButton.setPreferredSize(new Dimension(50, 25));
+            
+            editButton.addActionListener(e -> editTask());
+            deleteButton.addActionListener(e -> deleteTask());
+            
+            panel.add(editButton);
+            panel.add(deleteButton);
+        }
+
+        @Override
+        public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
+            currentRow = row;
+            return panel;
+        }
+
+        private void editTask() {
+            // 获取当前行的任务ID
+            String taskId = (String) tableModel.getValueAt(currentRow, 0);
+            try {
+                TeachingTask task = teachingTaskService.getTeachingTaskById(taskId);
+                if (task != null) {
+                    showEditTeachingTaskDialog(task, () -> {
+                        // 刷新表格数据
+                        try {
+                            List<TeachingTask> tasks = teachingTaskService.queryTeachingTasksByPage(0, 1000);
+                            tableModel.setRowCount(0);
+                            for (TeachingTask t : tasks) {
+                                String courseName = "";
+                                try {
+                                    Course course = courseService.getCourseById(t.getCourseId());
+                                 if (course != null) {
+                                     courseName = course.getName();
+                                 }
+                                } catch (Exception ex) {
+                                    courseName = "未知课程";
+                                }
+                                
+                                String teacherName = "";
+                                try {
+                                    Teacher teacher = teacherService.getTeacherById(t.getTeacherId());
+                                    if (teacher != null) {
+                                        teacherName = teacher.getName();
+                                    }
+                                } catch (Exception ex) {
+                                    teacherName = "未知教师";
+                                }
+                                
+                                Object[] row = {
+                                    t.getId(), t.getCourseId(), courseName, t.getTeacherId(), teacherName,
+                                    t.getAcademicYear(), t.getSemester(), t.getClassName(),
+                                    t.getClassTime(), t.getLocation(), t.getStatus(), "操作"
+                                };
+                                tableModel.addRow(row);
+                            }
+                        } catch (Exception ex) {
+                            JOptionPane.showMessageDialog(parentDialog, "刷新数据失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                        }
+                    });
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(parentDialog, "获取任务信息失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+            }
+            fireEditingStopped();
+        }
+
+        private void deleteTask() {
+            String taskId = (String) tableModel.getValueAt(currentRow, 0);
+            int confirm = JOptionPane.showConfirmDialog(parentDialog, "确定要删除这个教学任务吗？", "确认删除", JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                try {
+                    int result = teachingTaskService.deleteTeachingTask(taskId);
+                    if (result > 0) {
+                        JOptionPane.showMessageDialog(parentDialog, "删除成功", "成功", JOptionPane.INFORMATION_MESSAGE);
+                        tableModel.removeRow(currentRow);
+                    } else {
+                        JOptionPane.showMessageDialog(parentDialog, "删除失败", "错误", JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(parentDialog, "删除失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+            fireEditingStopped();
+        }
+    }
+
+    private void showEditTeachingTaskDialog(TeachingTask task, Runnable refreshCallback) {
+        JDialog dialog = new JDialog(frame, "编辑教学任务", true);
+        dialog.setSize(500, 400);
+        dialog.setLocationRelativeTo(frame);
+        dialog.setLayout(new BorderLayout());
+
+        // 表单面板
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+
+        // 任务ID（不可编辑）
+        gbc.gridx = 0; gbc.gridy = 0;
+        formPanel.add(new JLabel("任务ID:"), gbc);
+        gbc.gridx = 1;
+        JTextField taskIdField = new JTextField(20);
+        taskIdField.setText(task.getId());
+        taskIdField.setEditable(false);
+        formPanel.add(taskIdField, gbc);
+
+        // 课程选择
+        gbc.gridx = 0; gbc.gridy = 1;
+        formPanel.add(new JLabel("课程:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<Course> courseCombo = new JComboBox<>();
+        try {
+            List<Course> courses = courseService.queryAllCourses();
+            for (Course course : courses) {
+                courseCombo.addItem(course);
+                if (course.getId().equals(task.getCourseId())) {
+                    courseCombo.setSelectedItem(course);
+                }
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(dialog, "加载课程列表失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+        courseCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof Course) {
+                    Course course = (Course) value;
+                    setText(course.getId() + " - " + course.getName());
+                }
+                return this;
+            }
+        });
+        formPanel.add(courseCombo, gbc);
+
+        // 教师选择
+        gbc.gridx = 0; gbc.gridy = 2;
+        formPanel.add(new JLabel("教师:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<Teacher> teacherCombo = new JComboBox<>();
+        try {
+            List<Teacher> teachers = teacherService.queryTeachersByPage(0, 1000);
+            for (Teacher teacher : teachers) {
+                teacherCombo.addItem(teacher);
+                if (teacher.getId().equals(task.getTeacherId())) {
+                    teacherCombo.setSelectedItem(teacher);
+                }
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(dialog, "加载教师列表失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+        teacherCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof Teacher) {
+                    Teacher teacher = (Teacher) value;
+                    setText(teacher.getId() + " - " + teacher.getName());
+                }
+                return this;
+            }
+        });
+        formPanel.add(teacherCombo, gbc);
+
+        // 学年
+        gbc.gridx = 0; gbc.gridy = 3;
+        formPanel.add(new JLabel("学年:"), gbc);
+        gbc.gridx = 1;
+        JTextField academicYearField = new JTextField(20);
+        academicYearField.setText(task.getAcademicYear());
+        formPanel.add(academicYearField, gbc);
+
+        // 学期
+        gbc.gridx = 0; gbc.gridy = 4;
+        formPanel.add(new JLabel("学期:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> semesterCombo = new JComboBox<>(new String[]{"第一学期", "第二学期"});
+        semesterCombo.setSelectedItem(task.getSemester());
+        formPanel.add(semesterCombo, gbc);
+
+        // 班级
+        gbc.gridx = 0; gbc.gridy = 5;
+        formPanel.add(new JLabel("班级:"), gbc);
+        gbc.gridx = 1;
+        JTextField classNameField = new JTextField(20);
+        classNameField.setText(task.getClassName());
+        formPanel.add(classNameField, gbc);
+
+        // 上课时间
+        gbc.gridx = 0; gbc.gridy = 6;
+        formPanel.add(new JLabel("上课时间:"), gbc);
+        gbc.gridx = 1;
+        JTextField classTimeField = new JTextField(20);
+        classTimeField.setText(task.getClassTime());
+        formPanel.add(classTimeField, gbc);
+
+        // 上课地点
+        gbc.gridx = 0; gbc.gridy = 7;
+        formPanel.add(new JLabel("上课地点:"), gbc);
+        gbc.gridx = 1;
+        JTextField locationField = new JTextField(20);
+        locationField.setText(task.getLocation());
+        formPanel.add(locationField, gbc);
+
+        // 状态
+        gbc.gridx = 0; gbc.gridy = 8;
+        formPanel.add(new JLabel("状态:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> statusCombo = new JComboBox<>(new String[]{"待开始", "进行中", "已结束"});
+        statusCombo.setSelectedItem(task.getStatus());
+        formPanel.add(statusCombo, gbc);
+
+        dialog.add(formPanel, BorderLayout.CENTER);
+
+        // 按钮面板
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton saveButton = new JButton("保存");
+        JButton cancelButton = new JButton("取消");
+        
+        saveButton.addActionListener(e -> {
+            try {
+                // 验证输入
+                if (courseCombo.getSelectedItem() == null) {
+                    JOptionPane.showMessageDialog(dialog, "请选择课程", "错误", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                if (teacherCombo.getSelectedItem() == null) {
+                    JOptionPane.showMessageDialog(dialog, "请选择教师", "错误", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                if (classNameField.getText().trim().isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "请输入班级", "错误", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                // 更新教学任务对象
+                task.setCourseId(((Course) courseCombo.getSelectedItem()).getId());
+                task.setTeacherId(((Teacher) teacherCombo.getSelectedItem()).getId());
+                task.setAcademicYear(academicYearField.getText().trim());
+                task.setSemester((String) semesterCombo.getSelectedItem());
+                task.setClassName(classNameField.getText().trim());
+                task.setClassTime(classTimeField.getText().trim());
+                task.setLocation(locationField.getText().trim());
+                task.setStatus((String) statusCombo.getSelectedItem());
+
+                // 更新教学任务
+                int result = teachingTaskService.updateTeachingTask(task);
+                if (result > 0) {
+                    JOptionPane.showMessageDialog(dialog, "教学任务更新成功", "成功", JOptionPane.INFORMATION_MESSAGE);
+                    dialog.dispose();
+                    refreshCallback.run(); // 刷新父窗口数据
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "教学任务更新失败", "错误", JOptionPane.ERROR_MESSAGE);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "保存失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(saveButton);
+        buttonPanel.add(cancelButton);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+
         dialog.setVisible(true);
     }
 

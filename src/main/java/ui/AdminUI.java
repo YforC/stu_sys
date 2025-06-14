@@ -28,10 +28,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Date;
 
 public class AdminUI {
     private JFrame frame;
@@ -1028,13 +1030,10 @@ public class AdminUI {
             "学生成绩单导出",
             "班级成绩汇总报表",
             "课程成绩分布报表",
-            "学期成绩统计报表",
-            "教师所授课程成绩报表",
             "成绩排名报表",
             "不及格名单报表",
             "优秀学生名单报表",
-            "成绩趋势分析报表",
-            "自定义条件报表"
+            "成绩趋势分析报表"
         };
         for (String name : btnNames) {
             JButton btn = new JButton(name);
@@ -1050,6 +1049,14 @@ public class AdminUI {
                 btn.addActionListener(e -> showClassGradeSummaryDialog(dialog));
             } else if (name.equals("课程成绩分布报表")) {
                 btn.addActionListener(e -> showCourseGradeSummaryDialog(dialog));
+            } else if (name.equals("成绩排名报表")) {
+                btn.addActionListener(e -> showGradeRankingDialog(dialog));
+            } else if (name.equals("不及格名单报表")) {
+                btn.addActionListener(e -> showFailingStudentsDialog(dialog));
+            } else if (name.equals("优秀学生名单报表")) {
+                btn.addActionListener(e -> showExcellentStudentsDialog(dialog));
+            } else if (name.equals("成绩趋势分析报表")) {
+                btn.addActionListener(e -> showGradeTrendAnalysisDialog());
             }
             // 其他按钮的事件处理后续实现
         }
@@ -1579,6 +1586,938 @@ public class AdminUI {
             e.printStackTrace();
             JOptionPane.showMessageDialog(parent, "导出失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
         }
+    }
+    
+    private void showGradeRankingDialog(JDialog parent) {
+        JDialog dialog = new JDialog(parent, "成绩排名报表", true);
+        dialog.setSize(500, 400);
+        dialog.setLocationRelativeTo(parent);
+        dialog.setLayout(new BorderLayout());
+        
+        // 创建主面板
+        JPanel mainPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        // 排名范围选择
+        gbc.gridx = 0; gbc.gridy = 0;
+        mainPanel.add(new JLabel("排名范围:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> scopeCombo = new JComboBox<>(new String[]{"班级排名", "全校排名"});
+        mainPanel.add(scopeCombo, gbc);
+        
+        // 班级名称输入（仅班级排名时显示）
+        gbc.gridx = 0; gbc.gridy = 1;
+        JLabel classLabel = new JLabel("班级名称:");
+        mainPanel.add(classLabel, gbc);
+        gbc.gridx = 1;
+        JTextField classField = new JTextField(15);
+        mainPanel.add(classField, gbc);
+        
+        // 学年输入
+        gbc.gridx = 0; gbc.gridy = 2;
+        mainPanel.add(new JLabel("学年:"), gbc);
+        gbc.gridx = 1;
+        JTextField yearField = new JTextField(15);
+        yearField.setText("2023-2024");
+        mainPanel.add(yearField, gbc);
+        
+        // 学期选择
+        gbc.gridx = 0; gbc.gridy = 3;
+        mainPanel.add(new JLabel("学期:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> semesterCombo = new JComboBox<>(new String[]{"春", "秋"});
+        mainPanel.add(semesterCombo, gbc);
+        
+        // 排名类型选择
+        gbc.gridx = 0; gbc.gridy = 4;
+        mainPanel.add(new JLabel("排名类型:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> rankTypeCombo = new JComboBox<>(new String[]{"总分排名", "平均分排名", "单科成绩排名"});
+        mainPanel.add(rankTypeCombo, gbc);
+        
+        // 课程ID输入（仅单科成绩排名时显示）
+        gbc.gridx = 0; gbc.gridy = 5;
+        JLabel courseLabel = new JLabel("课程ID:");
+        mainPanel.add(courseLabel, gbc);
+        gbc.gridx = 1;
+        JTextField courseField = new JTextField(15);
+        mainPanel.add(courseField, gbc);
+        
+        // 限制条数输入（仅全校排名时显示）
+        gbc.gridx = 0; gbc.gridy = 6;
+        JLabel limitLabel = new JLabel("显示前N名:");
+        mainPanel.add(limitLabel, gbc);
+        gbc.gridx = 1;
+        JTextField limitField = new JTextField(15);
+        limitField.setText("50");
+        mainPanel.add(limitField, gbc);
+        
+        // 初始状态设置
+        courseLabel.setVisible(false);
+        courseField.setVisible(false);
+        limitLabel.setVisible(false);
+        limitField.setVisible(false);
+        
+        // 监听器设置
+        scopeCombo.addActionListener(e -> {
+            boolean isClass = "班级排名".equals(scopeCombo.getSelectedItem());
+            classLabel.setVisible(isClass);
+            classField.setVisible(isClass);
+            limitLabel.setVisible(!isClass);
+            limitField.setVisible(!isClass);
+            dialog.revalidate();
+        });
+        
+        rankTypeCombo.addActionListener(e -> {
+            boolean isCourse = "单科成绩排名".equals(rankTypeCombo.getSelectedItem());
+            courseLabel.setVisible(isCourse);
+            courseField.setVisible(isCourse);
+            dialog.revalidate();
+        });
+        
+        dialog.add(mainPanel, BorderLayout.CENTER);
+        
+        // 按钮面板
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton generateBtn = new JButton("生成报表");
+        JButton cancelBtn = new JButton("取消");
+        
+        generateBtn.addActionListener(e -> {
+            try {
+                String scope = (String) scopeCombo.getSelectedItem();
+                String className = classField.getText().trim();
+                String academicYear = yearField.getText().trim();
+                String semester = (String) semesterCombo.getSelectedItem();
+                String rankTypeStr = (String) rankTypeCombo.getSelectedItem();
+                String courseId = courseField.getText().trim();
+                String limitStr = limitField.getText().trim();
+                
+                // 参数验证
+                if ("班级排名".equals(scope) && className.isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "请输入班级名称！", "提示", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                if ("单科成绩排名".equals(rankTypeStr) && courseId.isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "请输入课程ID！", "提示", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                
+                // 转换排名类型
+                String rankType;
+                switch (rankTypeStr) {
+                    case "总分排名": rankType = "total"; break;
+                    case "平均分排名": rankType = "average"; break;
+                    case "单科成绩排名": rankType = "course"; break;
+                    default: rankType = "total";
+                }
+                
+                Integer limit = null;
+                if ("全校排名".equals(scope) && !limitStr.isEmpty()) {
+                    try {
+                        limit = Integer.parseInt(limitStr);
+                    } catch (NumberFormatException ex) {
+                        JOptionPane.showMessageDialog(dialog, "显示条数必须是数字！", "提示", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                }
+                
+                exportGradeRanking(scope, className, academicYear, semester, rankType, courseId, limit, dialog);
+                
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(dialog, "生成报表失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        
+        cancelBtn.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(generateBtn);
+        buttonPanel.add(cancelBtn);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        
+        dialog.setVisible(true);
+    }
+    
+    private void exportGradeRanking(String scope, String className, String academicYear, String semester, 
+                                   String rankType, String courseId, Integer limit, JDialog parent) {
+        try {
+            GradeService gradeService = new GradeServiceImpl();
+            List<Map<String, Object>> rankings;
+            
+            // 获取排名数据
+            if ("班级排名".equals(scope)) {
+                rankings = gradeService.getClassGradeRanking(className, academicYear, semester, rankType, courseId);
+            } else {
+                rankings = gradeService.getSchoolGradeRanking(academicYear, semester, rankType, courseId, limit);
+            }
+            
+            if (rankings.isEmpty()) {
+                JOptionPane.showMessageDialog(parent, "未找到符合条件的排名数据！", "提示", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            
+            // 创建Excel工作簿
+            Workbook workbook = new XSSFWorkbook();
+            Sheet sheet = workbook.createSheet("成绩排名报表");
+            
+            // 创建标题行
+            Row titleRow = sheet.createRow(0);
+            String title = scope + "_" + getRankTypeDisplayName(rankType) + "_" + academicYear + "_" + semester;
+            if ("course".equals(rankType)) {
+                title += "_课程" + courseId;
+            }
+            titleRow.createCell(0).setCellValue(title);
+            
+            // 创建表头
+            Row headerRow = sheet.createRow(2);
+            String[] headers;
+            if ("course".equals(rankType)) {
+                headers = new String[]{"排名", "学号", "姓名", "班级", "课程名称", "总评成绩", "平时成绩", "期中成绩", "期末成绩"};
+                if ("全校排名".equals(scope)) {
+                    headers = new String[]{"排名", "学号", "姓名", "班级", "专业", "课程名称", "总评成绩", "平时成绩", "期中成绩", "期末成绩"};
+                }
+            } else {
+                headers = new String[]{"排名", "学号", "姓名", "班级", "总分", "课程数", "平均分"};
+                if ("全校排名".equals(scope)) {
+                    headers = new String[]{"排名", "学号", "姓名", "班级", "专业", "总分", "课程数", "平均分"};
+                }
+            }
+            
+            for (int i = 0; i < headers.length; i++) {
+                headerRow.createCell(i).setCellValue(headers[i]);
+            }
+            
+            // 填充数据
+            int rowIdx = 3;
+            for (Map<String, Object> ranking : rankings) {
+                Row row = sheet.createRow(rowIdx++);
+                int colIdx = 0;
+                
+                row.createCell(colIdx++).setCellValue((Integer) ranking.get("rank"));
+                row.createCell(colIdx++).setCellValue((String) ranking.get("studentId"));
+                row.createCell(colIdx++).setCellValue((String) ranking.get("studentName"));
+                row.createCell(colIdx++).setCellValue((String) ranking.get("className"));
+                
+                if ("全校排名".equals(scope)) {
+                    row.createCell(colIdx++).setCellValue((String) ranking.get("major"));
+                }
+                
+                if ("course".equals(rankType)) {
+                    row.createCell(colIdx++).setCellValue((String) ranking.get("courseName"));
+                    row.createCell(colIdx++).setCellValue(ranking.get("totalScore") != null ? (Double) ranking.get("totalScore") : 0.0);
+                    row.createCell(colIdx++).setCellValue(ranking.get("regularScore") != null ? ranking.get("regularScore").toString() : "");
+                    row.createCell(colIdx++).setCellValue(ranking.get("midtermScore") != null ? ranking.get("midtermScore").toString() : "");
+                    row.createCell(colIdx++).setCellValue(ranking.get("finalScore") != null ? ranking.get("finalScore").toString() : "");
+                } else {
+                    row.createCell(colIdx++).setCellValue((Double) ranking.get("totalScore"));
+                    row.createCell(colIdx++).setCellValue((Integer) ranking.get("courseCount"));
+                    row.createCell(colIdx++).setCellValue((Double) ranking.get("averageScore"));
+                }
+            }
+            
+            // 自动调整列宽
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+            
+            // 保存文件
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("保存成绩排名报表");
+            fileChooser.setFileFilter(new FileNameExtensionFilter("Excel文件 (*.xlsx)", "xlsx"));
+            fileChooser.setSelectedFile(new File(title + ".xlsx"));
+            
+            int userSelection = fileChooser.showSaveDialog(parent);
+            if (userSelection == JFileChooser.APPROVE_OPTION) {
+                File fileToSave = fileChooser.getSelectedFile();
+                if (!fileToSave.getName().toLowerCase().endsWith(".xlsx")) {
+                    fileToSave = new File(fileToSave.getAbsolutePath() + ".xlsx");
+                }
+                
+                try (FileOutputStream outputStream = new FileOutputStream(fileToSave)) {
+                    workbook.write(outputStream);
+                    JOptionPane.showMessageDialog(parent, "成绩排名报表导出成功！\n文件保存位置: " + fileToSave.getAbsolutePath(), "成功", JOptionPane.INFORMATION_MESSAGE);
+                    parent.dispose();
+                }
+            }
+            
+            workbook.close();
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(parent, "导出失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    private String getRankTypeDisplayName(String rankType) {
+        switch (rankType) {
+            case "total": return "总分排名";
+            case "average": return "平均分排名";
+            case "course": return "单科成绩排名";
+            default: return "排名";
+        }
+    }
+    
+    private void showFailingStudentsDialog(JDialog parent) {
+        JDialog dialog = new JDialog(parent, "不及格名单报表", true);
+        dialog.setSize(500, 400);
+        dialog.setLocationRelativeTo(parent);
+        dialog.setLayout(new BorderLayout());
+        
+        // 查询条件面板
+        JPanel queryPanel = new JPanel(new GridBagLayout());
+        queryPanel.setBorder(BorderFactory.createTitledBorder("查询条件"));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        
+        // 班级选择 - 从数据库动态加载
+        gbc.gridx = 0; gbc.gridy = 0;
+        queryPanel.add(new JLabel("班级："), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> classCombo = new JComboBox<>();
+        classCombo.addItem(""); // 添加空选项
+        try {
+            List<String> classNames = gradeService.getAllClassNames();
+            for (String className : classNames) {
+                classCombo.addItem(className);
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(dialog, "加载班级数据失败：" + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+        queryPanel.add(classCombo, gbc);
+        
+        // 学年选择 - 从数据库动态加载
+        gbc.gridx = 0; gbc.gridy = 1;
+        queryPanel.add(new JLabel("学年："), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> yearCombo = new JComboBox<>();
+        yearCombo.addItem(""); // 添加空选项
+        try {
+            List<String> academicYears = gradeService.getAllAcademicYears();
+            for (String year : academicYears) {
+                yearCombo.addItem(year);
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(dialog, "加载学年数据失败：" + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+        queryPanel.add(yearCombo, gbc);
+        
+        // 学期选择
+        gbc.gridx = 0; gbc.gridy = 2;
+        queryPanel.add(new JLabel("学期："), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> semesterCombo = new JComboBox<>(new String[]{"", "春", "秋"});
+        queryPanel.add(semesterCombo, gbc);
+        
+        // 课程选择 - 从数据库动态加载
+        gbc.gridx = 0; gbc.gridy = 3;
+        queryPanel.add(new JLabel("课程："), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> courseCombo = new JComboBox<>();
+        courseCombo.addItem(""); // 添加空选项
+        try {
+            List<Map<String, Object>> courses = gradeService.getAllCourses();
+            for (Map<String, Object> course : courses) {
+                String courseId = (String) course.get("id");
+                String courseName = (String) course.get("name");
+                courseCombo.addItem(courseId + "-" + courseName);
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(dialog, "加载课程数据失败：" + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+        queryPanel.add(courseCombo, gbc);
+        
+        dialog.add(queryPanel, BorderLayout.NORTH);
+        
+        // 按钮面板
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton queryBtn = new JButton("查询");
+        JButton exportBtn = new JButton("导出Excel");
+        JButton closeBtn = new JButton("关闭");
+        
+        buttonPanel.add(queryBtn);
+        buttonPanel.add(exportBtn);
+        buttonPanel.add(closeBtn);
+        
+        // 结果显示面板
+        JPanel resultPanel = new JPanel(new BorderLayout());
+        resultPanel.setBorder(BorderFactory.createTitledBorder("查询结果"));
+        
+        String[] columnNames = {"学号", "姓名", "班级", "专业", "课程", "总分", "平时成绩", "期中成绩", "期末成绩", "学年", "学期"};
+        DefaultTableModel tableModel = new DefaultTableModel(columnNames, 0);
+        JTable resultTable = new JTable(tableModel);
+        resultTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        
+        JScrollPane scrollPane = new JScrollPane(resultTable);
+        scrollPane.setPreferredSize(new Dimension(450, 200));
+        resultPanel.add(scrollPane, BorderLayout.CENTER);
+        
+        dialog.add(resultPanel, BorderLayout.CENTER);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        
+        // 查询按钮事件
+        queryBtn.addActionListener(e -> {
+            String className = (String) classCombo.getSelectedItem();
+            String academicYear = (String) yearCombo.getSelectedItem();
+            String semester = (String) semesterCombo.getSelectedItem();
+            String courseSelection = (String) courseCombo.getSelectedItem();
+            String courseId = null;
+            
+            if (courseSelection != null && !courseSelection.isEmpty() && courseSelection.contains("-")) {
+                courseId = courseSelection.split("-")[0];
+            }
+            
+            try {
+                List<Map<String, Object>> failingStudents = gradeService.getFailingStudents(
+                    className.isEmpty() ? null : className,
+                    academicYear.isEmpty() ? null : academicYear,
+                    semester.isEmpty() ? null : semester,
+                    courseId
+                );
+                
+                // 清空表格
+                tableModel.setRowCount(0);
+                
+                // 填充数据
+                for (Map<String, Object> student : failingStudents) {
+                    Object[] row = {
+                        student.get("studentId"),
+                        student.get("studentName"),
+                        student.get("className"),
+                        student.get("major"),
+                        student.get("courseName"),
+                        student.get("totalScore"),
+                        student.get("regularScore"),
+                        student.get("midtermScore"),
+                        student.get("finalScore"),
+                        student.get("academicYear"),
+                        student.get("semester")
+                    };
+                    tableModel.addRow(row);
+                }
+                
+                if (failingStudents.isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "未找到符合条件的不及格学生记录", "查询结果", JOptionPane.INFORMATION_MESSAGE);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "查询失败：" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                ex.printStackTrace();
+            }
+        });
+        
+        // 导出按钮事件
+        exportBtn.addActionListener(e -> {
+            if (tableModel.getRowCount() == 0) {
+                JOptionPane.showMessageDialog(dialog, "没有数据可导出，请先查询", "提示", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            exportFailingStudents(tableModel, dialog);
+        });
+        
+        // 关闭按钮事件
+        closeBtn.addActionListener(e -> dialog.dispose());
+        
+        dialog.setVisible(true);
+    }
+    
+    private void exportFailingStudents(DefaultTableModel tableModel, JDialog parent) {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("保存不及格名单报表");
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Excel文件 (*.xlsx)", "xlsx"));
+        fileChooser.setSelectedFile(new File("不及格名单报表_" + 
+            new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".xlsx"));
+        
+        if (fileChooser.showSaveDialog(parent) == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            if (!file.getName().toLowerCase().endsWith(".xlsx")) {
+                file = new File(file.getAbsolutePath() + ".xlsx");
+            }
+            
+            try (Workbook workbook = new XSSFWorkbook()) {
+                Sheet sheet = workbook.createSheet("不及格名单");
+                
+                // 创建标题行
+                Row headerRow = sheet.createRow(0);
+                String[] headers = {"学号", "姓名", "班级", "专业", "课程", "总分", "平时成绩", "期中成绩", "期末成绩", "学年", "学期"};
+                for (int i = 0; i < headers.length; i++) {
+                    Cell cell = headerRow.createCell(i);
+                    cell.setCellValue(headers[i]);
+                    
+                    // 设置标题样式
+                    CellStyle headerStyle = workbook.createCellStyle();
+                    org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+                    headerFont.setBold(true);
+                    headerStyle.setFont(headerFont);
+                    headerStyle.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
+                    headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                    cell.setCellStyle(headerStyle);
+                }
+                
+                // 填充数据
+                for (int i = 0; i < tableModel.getRowCount(); i++) {
+                    Row row = sheet.createRow(i + 1);
+                    for (int j = 0; j < tableModel.getColumnCount(); j++) {
+                        Cell cell = row.createCell(j);
+                        Object value = tableModel.getValueAt(i, j);
+                        if (value != null) {
+                            if (value instanceof Number) {
+                                cell.setCellValue(((Number) value).doubleValue());
+                            } else {
+                                cell.setCellValue(value.toString());
+                            }
+                        }
+                    }
+                }
+                
+                // 自动调整列宽
+                for (int i = 0; i < headers.length; i++) {
+                    sheet.autoSizeColumn(i);
+                }
+                
+                // 保存文件
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    workbook.write(fos);
+                }
+                
+                JOptionPane.showMessageDialog(parent, "不及格名单报表导出成功！\n文件路径：" + file.getAbsolutePath(), 
+                    "导出成功", JOptionPane.INFORMATION_MESSAGE);
+                    
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(parent, "导出失败：" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                ex.printStackTrace();
+            }
+        }
+    }
+    
+    private void showExcellentStudentsDialog(JDialog parent) {
+        JDialog dialog = new JDialog(parent, "优秀学生名单报表", true);
+        dialog.setSize(800, 600);
+        dialog.setLocationRelativeTo(parent);
+        dialog.setLayout(new BorderLayout());
+        
+        // 标题
+        JLabel title = new JLabel("优秀学生名单报表 (总分≥85分)", SwingConstants.CENTER);
+        title.setFont(new Font("微软雅黑", Font.BOLD, 18));
+        title.setBorder(BorderFactory.createEmptyBorder(10, 0, 10, 0));
+        dialog.add(title, BorderLayout.NORTH);
+        
+        // 查询条件面板
+        JPanel queryPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        queryPanel.setBorder(BorderFactory.createTitledBorder("查询条件"));
+        
+        queryPanel.add(new JLabel("班级："));
+        JComboBox<String> classComboBox = new JComboBox<>();
+        classComboBox.addItem(""); // 空选项表示全部
+        try {
+            List<String> classNames = gradeService.getAllClassNames();
+            for (String className : classNames) {
+                classComboBox.addItem(className);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        queryPanel.add(classComboBox);
+        
+        queryPanel.add(new JLabel("学年："));
+        JComboBox<String> yearComboBox = new JComboBox<>();
+        yearComboBox.addItem(""); // 空选项表示全部
+        try {
+            List<String> academicYears = gradeService.getAllAcademicYears();
+            for (String year : academicYears) {
+                yearComboBox.addItem(year);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        queryPanel.add(yearComboBox);
+        
+        queryPanel.add(new JLabel("学期："));
+        JComboBox<String> semesterComboBox = new JComboBox<>();
+        semesterComboBox.addItem(""); // 空选项表示全部
+        semesterComboBox.addItem("春");
+        semesterComboBox.addItem("秋");
+        queryPanel.add(semesterComboBox);
+        
+        queryPanel.add(new JLabel("课程："));
+        JComboBox<String> courseComboBox = new JComboBox<>();
+        courseComboBox.addItem(""); // 空选项表示全部
+        try {
+            List<Map<String, Object>> courses = gradeService.getAllCourses();
+            for (Map<String, Object> course : courses) {
+                courseComboBox.addItem(course.get("id") + " - " + course.get("name"));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        queryPanel.add(courseComboBox);
+        
+        JButton queryBtn = new JButton("查询");
+        queryBtn.setBackground(new Color(70, 130, 180));
+        queryBtn.setForeground(Color.WHITE);
+        queryPanel.add(queryBtn);
+        
+        dialog.add(queryPanel, BorderLayout.NORTH);
+        
+        // 结果表格
+        String[] columnNames = {"学号", "姓名", "班级", "专业", "课程", "学分", "学年", "学期", "平时成绩", "期中成绩", "期末成绩", "总分"};
+        DefaultTableModel tableModel = new DefaultTableModel(columnNames, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable table = new JTable(tableModel);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.getTableHeader().setReorderingAllowed(false);
+        
+        // 设置表格列宽
+        table.getColumnModel().getColumn(0).setPreferredWidth(80);  // 学号
+        table.getColumnModel().getColumn(1).setPreferredWidth(80);  // 姓名
+        table.getColumnModel().getColumn(2).setPreferredWidth(100); // 班级
+        table.getColumnModel().getColumn(3).setPreferredWidth(100); // 专业
+        table.getColumnModel().getColumn(4).setPreferredWidth(120); // 课程
+        table.getColumnModel().getColumn(5).setPreferredWidth(60);  // 学分
+        table.getColumnModel().getColumn(6).setPreferredWidth(80);  // 学年
+        table.getColumnModel().getColumn(7).setPreferredWidth(80);  // 学期
+        table.getColumnModel().getColumn(8).setPreferredWidth(80);  // 平时成绩
+        table.getColumnModel().getColumn(9).setPreferredWidth(80);  // 期中成绩
+        table.getColumnModel().getColumn(10).setPreferredWidth(80); // 期末成绩
+        table.getColumnModel().getColumn(11).setPreferredWidth(60); // 总分
+        
+        JScrollPane scrollPane = new JScrollPane(table);
+        dialog.add(scrollPane, BorderLayout.CENTER);
+        
+        // 按钮面板
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        
+        JButton exportBtn = new JButton("导出Excel");
+        exportBtn.setBackground(new Color(34, 139, 34));
+        exportBtn.setForeground(Color.WHITE);
+        
+        JButton closeBtn = new JButton("关闭");
+        closeBtn.addActionListener(e -> dialog.dispose());
+        
+        buttonPanel.add(exportBtn);
+        buttonPanel.add(closeBtn);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        
+        // 查询按钮事件
+        queryBtn.addActionListener(e -> {
+            try {
+                String selectedClass = (String) classComboBox.getSelectedItem();
+                String selectedYear = (String) yearComboBox.getSelectedItem();
+                String selectedSemester = (String) semesterComboBox.getSelectedItem();
+                String selectedCourse = (String) courseComboBox.getSelectedItem();
+                
+                // 处理课程选择（提取课程ID）
+                String courseId = null;
+                if (selectedCourse != null && !selectedCourse.trim().isEmpty()) {
+                    String[] parts = selectedCourse.split(" - ");
+                    if (parts.length > 0) {
+                        courseId = parts[0];
+                    }
+                }
+                
+                // 清空表格
+                tableModel.setRowCount(0);
+                
+                // 查询优秀学生数据
+                List<Map<String, Object>> excellentStudents = gradeService.getExcellentStudents(
+                    selectedClass != null && !selectedClass.trim().isEmpty() ? selectedClass : null,
+                    selectedYear != null && !selectedYear.trim().isEmpty() ? selectedYear : null,
+                    selectedSemester != null && !selectedSemester.trim().isEmpty() ? selectedSemester : null,
+                    courseId
+                );
+                
+                // 填充表格数据
+                for (Map<String, Object> student : excellentStudents) {
+                    Object[] rowData = {
+                        student.get("studentId"),
+                        student.get("studentName"),
+                        student.get("className"),
+                        student.get("major"),
+                        student.get("courseName"),
+                        student.get("credits"),
+                        student.get("academicYear"),
+                        student.get("semester"),
+                        student.get("regularScore"),
+                        student.get("midtermScore"),
+                        student.get("finalScore"),
+                        student.get("totalScore")
+                    };
+                    tableModel.addRow(rowData);
+                }
+                
+                if (excellentStudents.isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog, "未找到符合条件的优秀学生记录！", "提示", JOptionPane.INFORMATION_MESSAGE);
+                }
+                
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "查询失败：" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                ex.printStackTrace();
+            }
+        });
+        
+        // 导出Excel按钮事件
+        exportBtn.addActionListener(e -> exportExcellentStudentsToExcel(dialog, tableModel));
+        
+        dialog.setVisible(true);
+    }
+    
+    private void exportExcellentStudentsToExcel(JDialog parent, DefaultTableModel tableModel) {
+        if (tableModel.getRowCount() == 0) {
+            JOptionPane.showMessageDialog(parent, "没有数据可以导出！", "提示", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("保存优秀学生名单报表");
+        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Excel文件 (*.xlsx)", "xlsx"));
+        fileChooser.setSelectedFile(new File("优秀学生名单报表_" + 
+            new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".xlsx"));
+        
+        if (fileChooser.showSaveDialog(parent) == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            if (!file.getName().toLowerCase().endsWith(".xlsx")) {
+                file = new File(file.getAbsolutePath() + ".xlsx");
+            }
+            
+            try (Workbook workbook = new XSSFWorkbook()) {
+                Sheet sheet = workbook.createSheet("优秀学生名单");
+                
+                // 创建标题行
+                Row headerRow = sheet.createRow(0);
+                String[] headers = {"学号", "姓名", "班级", "专业", "课程", "学分", "学年", "学期", "平时成绩", "期中成绩", "期末成绩", "总分"};
+                
+                // 设置标题样式
+                CellStyle headerStyle = workbook.createCellStyle();
+                headerStyle.setFillForegroundColor(IndexedColors.LIGHT_BLUE.getIndex());
+                headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                headerStyle.setBorderBottom(BorderStyle.THIN);
+                headerStyle.setBorderTop(BorderStyle.THIN);
+                headerStyle.setBorderRight(BorderStyle.THIN);
+                headerStyle.setBorderLeft(BorderStyle.THIN);
+                headerStyle.setAlignment(HorizontalAlignment.CENTER);
+                
+                org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+                headerFont.setBold(true);
+                headerStyle.setFont(headerFont);
+                
+                for (int i = 0; i < headers.length; i++) {
+                    Cell cell = headerRow.createCell(i);
+                    cell.setCellValue(headers[i]);
+                    cell.setCellStyle(headerStyle);
+                }
+                
+                // 创建数据行
+                CellStyle dataStyle = workbook.createCellStyle();
+                dataStyle.setBorderBottom(BorderStyle.THIN);
+                dataStyle.setBorderTop(BorderStyle.THIN);
+                dataStyle.setBorderRight(BorderStyle.THIN);
+                dataStyle.setBorderLeft(BorderStyle.THIN);
+                dataStyle.setAlignment(HorizontalAlignment.CENTER);
+                
+                for (int i = 0; i < tableModel.getRowCount(); i++) {
+                    Row row = sheet.createRow(i + 1);
+                    for (int j = 0; j < tableModel.getColumnCount(); j++) {
+                        Cell cell = row.createCell(j);
+                        Object value = tableModel.getValueAt(i, j);
+                        if (value != null) {
+                            cell.setCellValue(value.toString());
+                        }
+                        cell.setCellStyle(dataStyle);
+                    }
+                }
+                
+                // 自动调整列宽
+                for (int i = 0; i < headers.length; i++) {
+                    sheet.autoSizeColumn(i);
+                }
+                
+                // 写入文件
+                try (FileOutputStream fileOut = new FileOutputStream(file)) {
+                    workbook.write(fileOut);
+                }
+                
+                JOptionPane.showMessageDialog(parent, "优秀学生名单报表导出成功！\n文件路径：" + file.getAbsolutePath(), 
+                    "导出成功", JOptionPane.INFORMATION_MESSAGE);
+                    
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(parent, "导出失败：" + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                ex.printStackTrace();
+            }
+        }
+    }
+    
+    /**
+     * 显示成绩趋势分析报表对话框
+     */
+    private void showGradeTrendAnalysisDialog() {
+        JDialog dialog = new JDialog(frame, "成绩趋势分析报表", true);
+        dialog.setSize(1000, 700);
+        dialog.setLocationRelativeTo(frame);
+        
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        
+        // 查询条件面板
+        JPanel queryPanel = new JPanel(new GridBagLayout());
+        queryPanel.setBorder(BorderFactory.createTitledBorder("查询条件"));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        
+        // 分析类型
+        gbc.gridx = 0; gbc.gridy = 0;
+        queryPanel.add(new JLabel("分析类型:"), gbc);
+        gbc.gridx = 1;
+        JComboBox<String> analysisTypeCombo = new JComboBox<>(new String[]{"班级", "课程", "学生"});
+        queryPanel.add(analysisTypeCombo, gbc);
+        
+        // 目标选择
+        gbc.gridx = 2; gbc.gridy = 0;
+        queryPanel.add(new JLabel("选择目标:"), gbc);
+        gbc.gridx = 3;
+        JComboBox<String> targetCombo = new JComboBox<>();
+        queryPanel.add(targetCombo, gbc);
+        
+        // 查询按钮
+        gbc.gridx = 4; gbc.gridy = 0;
+        JButton queryButton = new JButton("查询");
+        queryPanel.add(queryButton, gbc);
+        
+        // 导出图表按钮
+        gbc.gridx = 5; gbc.gridy = 0;
+        JButton exportButton = new JButton("导出图表");
+        exportButton.setEnabled(false);
+        queryPanel.add(exportButton, gbc);
+        
+        mainPanel.add(queryPanel, BorderLayout.NORTH);
+        
+        // 图表显示面板
+        JPanel chartPanel = new JPanel(new BorderLayout());
+        chartPanel.setBorder(BorderFactory.createTitledBorder("趋势分析图表"));
+        JLabel noDataLabel = new JLabel("请选择查询条件并点击查询按钮", JLabel.CENTER);
+        noDataLabel.setFont(new Font("微软雅黑", Font.PLAIN, 16));
+        noDataLabel.setForeground(Color.GRAY);
+        chartPanel.add(noDataLabel, BorderLayout.CENTER);
+        mainPanel.add(chartPanel, BorderLayout.CENTER);
+        
+        // 存储当前图表对象
+        final org.jfree.chart.JFreeChart[] currentChart = {null};
+        
+        // 分析类型变化事件
+        analysisTypeCombo.addActionListener(e -> {
+            String selectedType = (String) analysisTypeCombo.getSelectedItem();
+            targetCombo.removeAllItems();
+            
+            try {
+                if ("班级".equals(selectedType)) {
+                    List<String> classNames = gradeService.getAllClassNames();
+                    for (String className : classNames) {
+                        targetCombo.addItem(className);
+                    }
+                } else if ("课程".equals(selectedType)) {
+                    List<Map<String, Object>> courses = gradeService.getAllCourses();
+                    for (Map<String, Object> course : courses) {
+                        targetCombo.addItem(course.get("id") + " - " + course.get("name"));
+                    }
+                } else if ("学生".equals(selectedType)) {
+                    // 这里可以添加学生选择逻辑，暂时使用输入框
+                    targetCombo.setEditable(true);
+                    targetCombo.addItem("请输入学生ID");
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "加载数据失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        
+        // 初始化班级数据
+        analysisTypeCombo.setSelectedIndex(0);
+        analysisTypeCombo.getActionListeners()[0].actionPerformed(null);
+        
+        // 查询按钮事件
+        queryButton.addActionListener(e -> {
+            String analysisType = (String) analysisTypeCombo.getSelectedItem();
+            String selectedTarget = (String) targetCombo.getSelectedItem();
+            
+            if (selectedTarget == null || selectedTarget.trim().isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "请选择查询目标", "提示", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            try {
+                // 转换分析类型
+                String typeKey = "";
+                String targetId = "";
+                String targetName = "";
+                
+                switch (analysisType) {
+                    case "班级":
+                        typeKey = "class";
+                        targetId = selectedTarget;
+                        targetName = selectedTarget;
+                        break;
+                    case "课程":
+                        typeKey = "course";
+                        String[] parts = selectedTarget.split(" - ");
+                        targetId = parts[0];
+                        targetName = selectedTarget;
+                        break;
+                    case "学生":
+                        typeKey = "student";
+                        targetId = selectedTarget;
+                        targetName = selectedTarget;
+                        break;
+                }
+                
+                // 查询趋势数据
+                List<Map<String, Object>> trendData = gradeService.getGradeTrendAnalysis(typeKey, targetId);
+                
+                if (trendData.isEmpty()) {
+                    chartPanel.removeAll();
+                    JLabel noDataLabel2 = new JLabel("未找到相关数据", JLabel.CENTER);
+                    noDataLabel2.setFont(new Font("微软雅黑", Font.PLAIN, 16));
+                    noDataLabel2.setForeground(Color.GRAY);
+                    chartPanel.add(noDataLabel2, BorderLayout.CENTER);
+                    chartPanel.revalidate();
+                    chartPanel.repaint();
+                    exportButton.setEnabled(false);
+                    currentChart[0] = null;
+                    return;
+                }
+                
+                // 创建图表
+                org.jfree.chart.JFreeChart chart = utils.ChartUtils.createTrendChart(
+                    trendData, "成绩趋势分析", typeKey, targetName);
+                
+                // 创建图表面板
+                org.jfree.chart.ChartPanel jfreeChartPanel = utils.ChartUtils.createChartPanel(chart);
+                
+                // 更新显示
+                chartPanel.removeAll();
+                chartPanel.add(jfreeChartPanel, BorderLayout.CENTER);
+                chartPanel.revalidate();
+                chartPanel.repaint();
+                
+                // 启用导出按钮
+                exportButton.setEnabled(true);
+                currentChart[0] = chart;
+                
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "查询失败: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                ex.printStackTrace();
+            }
+        });
+        
+        // 导出图表按钮事件
+        exportButton.addActionListener(e -> {
+            if (currentChart[0] != null) {
+                utils.ChartUtils.showSaveDialog(dialog, currentChart[0]);
+            }
+        });
+        
+        dialog.add(mainPanel);
+        dialog.setVisible(true);
     }
 
     public static void main(String[] args) {

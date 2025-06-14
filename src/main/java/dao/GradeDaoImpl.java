@@ -484,4 +484,552 @@ public class GradeDaoImpl implements GradeDao {
         }
         return statistics;
     }
+    
+    @Override
+    public List<Map<String, Object>> getClassGradeRanking(String className, String academicYear, String semester, String rankType, String courseId) {
+        List<Map<String, Object>> rankings = new ArrayList<>();
+        StringBuilder sql = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        
+        if ("total".equals(rankType)) {
+            // 按总分排名
+            sql.append("SELECT s.id as student_id, s.name as student_name, s.class_name, ")
+               .append("SUM(g.total_score) as total_score, COUNT(g.id) as course_count, ")
+               .append("ROUND(AVG(g.total_score), 2) as average_score ")
+               .append("FROM student s ")
+               .append("JOIN grade g ON s.id = g.student_id ")
+               .append("JOIN teaching_task tt ON g.teaching_task_id = tt.id ")
+               .append("WHERE s.class_name = ? AND g.status IN ('公示中', '已归档') ");
+            params.add(className);
+            
+            if (academicYear != null && !academicYear.trim().isEmpty()) {
+                sql.append("AND tt.academic_year = ? ");
+                params.add(academicYear);
+            }
+            if (semester != null && !semester.trim().isEmpty()) {
+                sql.append("AND tt.semester = ? ");
+                params.add(semester);
+            }
+            
+            sql.append("GROUP BY s.id, s.name, s.class_name ")
+               .append("ORDER BY total_score DESC, average_score DESC");
+               
+        } else if ("average".equals(rankType)) {
+            // 按平均分排名
+            sql.append("SELECT s.id as student_id, s.name as student_name, s.class_name, ")
+               .append("SUM(g.total_score) as total_score, COUNT(g.id) as course_count, ")
+               .append("ROUND(AVG(g.total_score), 2) as average_score ")
+               .append("FROM student s ")
+               .append("JOIN grade g ON s.id = g.student_id ")
+               .append("JOIN teaching_task tt ON g.teaching_task_id = tt.id ")
+               .append("WHERE s.class_name = ? AND g.status IN ('公示中', '已归档') ");
+            params.add(className);
+            
+            if (academicYear != null && !academicYear.trim().isEmpty()) {
+                sql.append("AND tt.academic_year = ? ");
+                params.add(academicYear);
+            }
+            if (semester != null && !semester.trim().isEmpty()) {
+                sql.append("AND tt.semester = ? ");
+                params.add(semester);
+            }
+            
+            sql.append("GROUP BY s.id, s.name, s.class_name ")
+               .append("ORDER BY average_score DESC, total_score DESC");
+               
+        } else if ("course".equals(rankType) && courseId != null) {
+            // 按单科成绩排名
+            sql.append("SELECT s.id as student_id, s.name as student_name, s.class_name, ")
+               .append("c.id as course_id, c.name as course_name, g.total_score, ")
+               .append("g.regular_score, g.midterm_score, g.final_score ")
+               .append("FROM student s ")
+               .append("JOIN grade g ON s.id = g.student_id ")
+               .append("JOIN teaching_task tt ON g.teaching_task_id = tt.id ")
+               .append("JOIN course c ON tt.course_id = c.id ")
+               .append("WHERE s.class_name = ? AND c.id = ? AND g.status IN ('公示中', '已归档') ");
+            params.add(className);
+            params.add(courseId);
+            
+            if (academicYear != null && !academicYear.trim().isEmpty()) {
+                sql.append("AND tt.academic_year = ? ");
+                params.add(academicYear);
+            }
+            if (semester != null && !semester.trim().isEmpty()) {
+                sql.append("AND tt.semester = ? ");
+                params.add(semester);
+            }
+            
+            sql.append("ORDER BY g.total_score DESC");
+        }
+        
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            
+            try (ResultSet rs = ps.executeQuery()) {
+                int rank = 1;
+                while (rs.next()) {
+                    Map<String, Object> ranking = new HashMap<>();
+                    ranking.put("rank", rank++);
+                    ranking.put("studentId", rs.getString("student_id"));
+                    ranking.put("studentName", rs.getString("student_name"));
+                    ranking.put("className", rs.getString("class_name"));
+                    
+                    if ("course".equals(rankType)) {
+                        ranking.put("courseId", rs.getString("course_id"));
+                        ranking.put("courseName", rs.getString("course_name"));
+                        ranking.put("totalScore", rs.getDouble("total_score"));
+                        ranking.put("regularScore", rs.getObject("regular_score"));
+                        ranking.put("midtermScore", rs.getObject("midterm_score"));
+                        ranking.put("finalScore", rs.getObject("final_score"));
+                    } else {
+                        ranking.put("totalScore", rs.getDouble("total_score"));
+                        ranking.put("courseCount", rs.getInt("course_count"));
+                        ranking.put("averageScore", rs.getDouble("average_score"));
+                    }
+                    
+                    rankings.add(ranking);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return rankings;
+    }
+    
+    @Override
+    public List<Map<String, Object>> getSchoolGradeRanking(String academicYear, String semester, String rankType, String courseId, Integer limit) {
+        List<Map<String, Object>> rankings = new ArrayList<>();
+        StringBuilder sql = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        
+        if ("total".equals(rankType)) {
+            // 按总分排名
+            sql.append("SELECT s.id as student_id, s.name as student_name, s.class_name, s.major, ")
+               .append("SUM(g.total_score) as total_score, COUNT(g.id) as course_count, ")
+               .append("ROUND(AVG(g.total_score), 2) as average_score ")
+               .append("FROM student s ")
+               .append("JOIN grade g ON s.id = g.student_id ")
+               .append("JOIN teaching_task tt ON g.teaching_task_id = tt.id ")
+               .append("WHERE g.status IN ('公示中', '已归档') ");
+            
+            if (academicYear != null && !academicYear.trim().isEmpty()) {
+                sql.append("AND tt.academic_year = ? ");
+                params.add(academicYear);
+            }
+            if (semester != null && !semester.trim().isEmpty()) {
+                sql.append("AND tt.semester = ? ");
+                params.add(semester);
+            }
+            
+            sql.append("GROUP BY s.id, s.name, s.class_name, s.major ")
+               .append("ORDER BY total_score DESC, average_score DESC");
+               
+        } else if ("average".equals(rankType)) {
+            // 按平均分排名
+            sql.append("SELECT s.id as student_id, s.name as student_name, s.class_name, s.major, ")
+               .append("SUM(g.total_score) as total_score, COUNT(g.id) as course_count, ")
+               .append("ROUND(AVG(g.total_score), 2) as average_score ")
+               .append("FROM student s ")
+               .append("JOIN grade g ON s.id = g.student_id ")
+               .append("JOIN teaching_task tt ON g.teaching_task_id = tt.id ")
+               .append("WHERE g.status IN ('公示中', '已归档') ");
+            
+            if (academicYear != null && !academicYear.trim().isEmpty()) {
+                sql.append("AND tt.academic_year = ? ");
+                params.add(academicYear);
+            }
+            if (semester != null && !semester.trim().isEmpty()) {
+                sql.append("AND tt.semester = ? ");
+                params.add(semester);
+            }
+            
+            sql.append("GROUP BY s.id, s.name, s.class_name, s.major ")
+               .append("ORDER BY average_score DESC, total_score DESC");
+               
+        } else if ("course".equals(rankType) && courseId != null) {
+            // 按单科成绩排名
+            sql.append("SELECT s.id as student_id, s.name as student_name, s.class_name, s.major, ")
+               .append("c.id as course_id, c.name as course_name, g.total_score, ")
+               .append("g.regular_score, g.midterm_score, g.final_score ")
+               .append("FROM student s ")
+               .append("JOIN grade g ON s.id = g.student_id ")
+               .append("JOIN teaching_task tt ON g.teaching_task_id = tt.id ")
+               .append("JOIN course c ON tt.course_id = c.id ")
+               .append("WHERE c.id = ? AND g.status IN ('公示中', '已归档') ");
+            params.add(courseId);
+            
+            if (academicYear != null && !academicYear.trim().isEmpty()) {
+                sql.append("AND tt.academic_year = ? ");
+                params.add(academicYear);
+            }
+            if (semester != null && !semester.trim().isEmpty()) {
+                sql.append("AND tt.semester = ? ");
+                params.add(semester);
+            }
+            
+            sql.append("ORDER BY g.total_score DESC");
+        }
+        
+        if (limit != null && limit > 0) {
+            sql.append(" LIMIT ?");
+            params.add(limit);
+        }
+        
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            
+            try (ResultSet rs = ps.executeQuery()) {
+                int rank = 1;
+                while (rs.next()) {
+                    Map<String, Object> ranking = new HashMap<>();
+                    ranking.put("rank", rank++);
+                    ranking.put("studentId", rs.getString("student_id"));
+                    ranking.put("studentName", rs.getString("student_name"));
+                    ranking.put("className", rs.getString("class_name"));
+                    ranking.put("major", rs.getString("major"));
+                    
+                    if ("course".equals(rankType)) {
+                        ranking.put("courseId", rs.getString("course_id"));
+                        ranking.put("courseName", rs.getString("course_name"));
+                        ranking.put("totalScore", rs.getDouble("total_score"));
+                        ranking.put("regularScore", rs.getObject("regular_score"));
+                        ranking.put("midtermScore", rs.getObject("midterm_score"));
+                        ranking.put("finalScore", rs.getObject("final_score"));
+                    } else {
+                        ranking.put("totalScore", rs.getDouble("total_score"));
+                        ranking.put("courseCount", rs.getInt("course_count"));
+                        ranking.put("averageScore", rs.getDouble("average_score"));
+                    }
+                    
+                    rankings.add(ranking);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return rankings;
+    }
+    
+    @Override
+    public List<Map<String, Object>> getFailingStudents(String className, String academicYear, String semester, String courseId) {
+        List<Map<String, Object>> failingStudents = new ArrayList<>();
+        StringBuilder sql = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        
+        sql.append("SELECT s.id as student_id, s.name as student_name, s.class_name, s.major, ")
+           .append("c.id as course_id, c.name as course_name, g.total_score, ")
+           .append("g.regular_score, g.midterm_score, g.final_score, ")
+           .append("tt.academic_year, tt.semester ")
+           .append("FROM student s ")
+           .append("JOIN grade g ON s.id = g.student_id ")
+           .append("JOIN teaching_task tt ON g.teaching_task_id = tt.id ")
+           .append("JOIN course c ON tt.course_id = c.id ")
+           .append("WHERE g.total_score < 60 AND g.status IN ('公示中', '已归档') ");
+        
+        if (className != null && !className.trim().isEmpty()) {
+            sql.append("AND s.class_name = ? ");
+            params.add(className);
+        }
+        
+        if (academicYear != null && !academicYear.trim().isEmpty()) {
+            sql.append("AND tt.academic_year = ? ");
+            params.add(academicYear);
+        }
+        
+        if (semester != null && !semester.trim().isEmpty()) {
+            sql.append("AND tt.semester = ? ");
+            params.add(semester);
+        }
+        
+        if (courseId != null && !courseId.trim().isEmpty()) {
+            sql.append("AND c.id = ? ");
+            params.add(courseId);
+        }
+        
+        sql.append("ORDER BY s.class_name, s.id, c.name");
+        
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> student = new HashMap<>();
+                    student.put("studentId", rs.getString("student_id"));
+                    student.put("studentName", rs.getString("student_name"));
+                    student.put("className", rs.getString("class_name"));
+                    student.put("major", rs.getString("major"));
+                    student.put("courseId", rs.getString("course_id"));
+                    student.put("courseName", rs.getString("course_name"));
+                    student.put("totalScore", rs.getDouble("total_score"));
+                    student.put("regularScore", rs.getObject("regular_score"));
+                    student.put("midtermScore", rs.getObject("midterm_score"));
+                    student.put("finalScore", rs.getObject("final_score"));
+                    student.put("academicYear", rs.getString("academic_year"));
+                    student.put("semester", rs.getString("semester"));
+                    
+                    failingStudents.add(student);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return failingStudents;
+    }
+    
+    @Override
+    public List<String> getAllClassNames() {
+        List<String> classNames = new ArrayList<>();
+        String sql = "SELECT DISTINCT class_name FROM student WHERE status != '已删除' ORDER BY class_name";
+        
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            
+            while (rs.next()) {
+                String className = rs.getString("class_name");
+                if (className != null && !className.trim().isEmpty()) {
+                    classNames.add(className);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return classNames;
+    }
+    
+    @Override
+    public List<String> getAllAcademicYears() {
+        List<String> academicYears = new ArrayList<>();
+        String sql = "SELECT DISTINCT academic_year FROM teaching_task WHERE academic_year IS NOT NULL ORDER BY academic_year DESC";
+        
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            
+            while (rs.next()) {
+                String academicYear = rs.getString("academic_year");
+                if (academicYear != null && !academicYear.trim().isEmpty()) {
+                    academicYears.add(academicYear);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return academicYears;
+    }
+    
+    @Override
+    public List<Map<String, Object>> getAllCourses() {
+        List<Map<String, Object>> courses = new ArrayList<>();
+        String sql = "SELECT id, name FROM course ORDER BY id";
+        
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            
+            while (rs.next()) {
+                Map<String, Object> course = new HashMap<>();
+                course.put("id", rs.getString("id"));
+                course.put("name", rs.getString("name"));
+                courses.add(course);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return courses;
+    }
+    
+    @Override
+    public List<Map<String, Object>> getExcellentStudents(String className, String academicYear, String semester, String courseId) {
+        List<Map<String, Object>> excellentStudents = new ArrayList<>();
+        
+        StringBuilder sql = new StringBuilder(
+            "SELECT DISTINCT " +
+            "s.id as student_id, " +
+            "s.name as student_name, " +
+            "s.class_name, " +
+            "s.major, " +
+            "c.id as course_id, " +
+            "c.name as course_name, " +
+            "c.credits, " +
+            "t.academic_year, " +
+            "t.semester, " +
+            "g.regular_score, " +
+            "g.midterm_score, " +
+            "g.final_score, " +
+            "g.total_score " +
+            "FROM grade g " +
+            "JOIN teaching_task t ON g.teaching_task_id = t.id " +
+            "JOIN student s ON g.student_id = s.id " +
+            "JOIN course c ON t.course_id = c.id " +
+            "WHERE g.status != '已删除' AND g.total_score >= 85 "
+        );
+        
+        List<Object> params = new ArrayList<>();
+        
+        // 添加查询条件
+        if (className != null && !className.trim().isEmpty()) {
+            sql.append(" AND s.class_name = ?");
+            params.add(className.trim());
+        }
+        
+        if (academicYear != null && !academicYear.trim().isEmpty()) {
+            sql.append(" AND t.academic_year = ?");
+            params.add(academicYear.trim());
+        }
+        
+        if (semester != null && !semester.trim().isEmpty()) {
+            sql.append(" AND t.semester = ?");
+            params.add(semester.trim());
+        }
+        
+        if (courseId != null && !courseId.trim().isEmpty()) {
+            sql.append(" AND c.id = ?");
+            params.add(courseId.trim());
+        }
+        
+        sql.append(" ORDER BY g.total_score DESC, s.class_name, s.name");
+        
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            
+            // 设置参数
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> student = new HashMap<>();
+                    student.put("studentId", rs.getString("student_id"));
+                    student.put("studentName", rs.getString("student_name"));
+                    student.put("className", rs.getString("class_name"));
+                    student.put("major", rs.getString("major"));
+                    student.put("courseId", rs.getString("course_id"));
+                    student.put("courseName", rs.getString("course_name"));
+                    student.put("credits", rs.getDouble("credits"));
+                    student.put("academicYear", rs.getString("academic_year"));
+                    student.put("semester", rs.getString("semester"));
+                    student.put("regularScore", rs.getObject("regular_score"));
+                    student.put("midtermScore", rs.getObject("midterm_score"));
+                    student.put("finalScore", rs.getObject("final_score"));
+                    student.put("totalScore", rs.getObject("total_score"));
+                    
+                    excellentStudents.add(student);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return excellentStudents;
+    }
+    
+    @Override
+    public List<Map<String, Object>> getGradeTrendAnalysis(String analysisType, String targetId) {
+        List<Map<String, Object>> trendData = new ArrayList<>();
+        
+        String sql = "";
+        List<Object> params = new ArrayList<>();
+        
+        switch (analysisType) {
+            case "class":
+                sql = "SELECT " +
+                      "t.academic_year, " +
+                      "t.semester, " +
+                      "ROUND(AVG(g.total_score), 2) as avg_score, " +
+                      "ROUND(COUNT(CASE WHEN g.total_score >= 60 THEN 1 END) * 100.0 / COUNT(*), 2) as pass_rate, " +
+                      "ROUND(COUNT(CASE WHEN g.total_score >= 85 THEN 1 END) * 100.0 / COUNT(*), 2) as excellent_rate, " +
+                      "COUNT(*) as total_count " +
+                      "FROM grade g " +
+                      "JOIN teaching_task t ON g.teaching_task_id = t.id " +
+                      "JOIN student s ON g.student_id = s.id " +
+                      "WHERE g.status != '已删除' AND s.class_name = ? " +
+                      "GROUP BY t.academic_year, t.semester " +
+                      "ORDER BY t.academic_year, t.semester";
+                params.add(targetId);
+                break;
+                
+            case "course":
+                sql = "SELECT " +
+                      "t.academic_year, " +
+                      "t.semester, " +
+                      "ROUND(AVG(g.total_score), 2) as avg_score, " +
+                      "ROUND(COUNT(CASE WHEN g.total_score >= 60 THEN 1 END) * 100.0 / COUNT(*), 2) as pass_rate, " +
+                      "ROUND(COUNT(CASE WHEN g.total_score >= 85 THEN 1 END) * 100.0 / COUNT(*), 2) as excellent_rate, " +
+                      "COUNT(*) as total_count " +
+                      "FROM grade g " +
+                      "JOIN teaching_task t ON g.teaching_task_id = t.id " +
+                      "JOIN course c ON t.course_id = c.id " +
+                      "WHERE g.status != '已删除' AND c.id = ? " +
+                      "GROUP BY t.academic_year, t.semester " +
+                      "ORDER BY t.academic_year, t.semester";
+                params.add(targetId);
+                break;
+                
+            case "student":
+                sql = "SELECT " +
+                      "t.academic_year, " +
+                      "t.semester, " +
+                      "ROUND(AVG(g.total_score), 2) as avg_score, " +
+                      "ROUND(COUNT(CASE WHEN g.total_score >= 60 THEN 1 END) * 100.0 / COUNT(*), 2) as pass_rate, " +
+                      "ROUND(COUNT(CASE WHEN g.total_score >= 85 THEN 1 END) * 100.0 / COUNT(*), 2) as excellent_rate, " +
+                      "COUNT(*) as total_count " +
+                      "FROM grade g " +
+                      "JOIN teaching_task t ON g.teaching_task_id = t.id " +
+                      "WHERE g.status != '已删除' AND g.student_id = ? " +
+                      "GROUP BY t.academic_year, t.semester " +
+                      "ORDER BY t.academic_year, t.semester";
+                params.add(targetId);
+                break;
+                
+            default:
+                return trendData; // 返回空列表
+        }
+        
+        try (Connection conn = db_connection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            
+            // 设置参数
+            for (int i = 0; i < params.size(); i++) {
+                ps.setObject(i + 1, params.get(i));
+            }
+            
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> trend = new HashMap<>();
+                    trend.put("academicYear", rs.getString("academic_year"));
+                    trend.put("semester", rs.getString("semester"));
+                    trend.put("avgScore", rs.getDouble("avg_score"));
+                    trend.put("passRate", rs.getDouble("pass_rate"));
+                    trend.put("excellentRate", rs.getDouble("excellent_rate"));
+                    trend.put("totalCount", rs.getInt("total_count"));
+                    
+                    trendData.add(trend);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        
+        return trendData;
+    }
 }
